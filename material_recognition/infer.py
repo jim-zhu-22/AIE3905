@@ -12,6 +12,8 @@ class Predictor:
     def __init__(self, checkpoint_path: Path):
         self.checkpoint_path = checkpoint_path
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if self.device.type == "cpu":
+            torch.set_num_threads(8)
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         if tuple(checkpoint["labels"]) != LABELS:
             raise ValueError("Checkpoint label order does not match this project")

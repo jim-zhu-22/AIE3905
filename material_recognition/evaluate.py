@@ -13,6 +13,7 @@ from .model import build_model
 
 
 def evaluate(checkpoint_path: Path, manifest: Path, split: str, output_dir: Path, batch_size: int = 32):
+    torch.set_num_threads(8)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     if tuple(checkpoint["labels"]) != LABELS:
@@ -31,6 +32,8 @@ def evaluate(checkpoint_path: Path, manifest: Path, split: str, output_dir: Path
             scores.extend(probability.max(1).values.tolist())
     output_dir.mkdir(parents=True, exist_ok=True)
     report = {
+        "device": str(device),
+        "checkpoint": str(checkpoint_path),
         "split": split,
         "samples": len(true),
         "accuracy": accuracy_score(true, pred),

@@ -4,7 +4,21 @@ MirrorSpace × AIE3905 课程项目。输入单个抓取区域的 RGB 图像，�
 
 ## 当前进度
 
-已建立第一周的可运行基线：MINC-2500 五类提取、数据清单检查、ResNet-18 训练与评估、单图推理和 Gradio Demo。已下载 250 张五类均衡小样本，并用 ImageNet 预训练权重训练模型。50 张验证图上的准确率为 52%，Macro-F1 为 0.512；这个小样本结果只用于 POC，不代表完整数据或现场新 SKU 的效果。企业数据适配器要在收到标注导出样例后完成。当前执行记录见 `docs/week1.md`。
+第一周已下载五类 MINC 全集 12,500 张，完成 ResNet-18 分类头 2 轮和全网络微调 1 轮。625 张验证图上的准确率为 **75.20%**，Macro-F1 为 **0.7480**；验证集参与选模，保留的 1,250 张测试图尚未评估。完整基线使用 Python 3.11 CPU；已有 Python 3.12 CUDA 环境也完成了 200 张训练、50 张验证的独立 GPU 演示（准确率 54%，Macro-F1 0.5235）。显卡目前连续运算较慢，详见 `docs/gpu_environment.md`。企业数据尚未收到，现场基线与新 SKU 测试未完成。完整周报见 `docs/week1_report.md` 和 `deliverables/第一周周报.docx`。
+
+展示完整基线：
+
+```powershell
+.\.venv\Scripts\python.exe -m material_recognition.demo --checkpoint runs/week1_resnet18/best.pt
+```
+
+复现同样训练预算：
+
+```powershell
+.\.venv\Scripts\python.exe -m material_recognition.train --device cpu --head-epochs 2 --full-epochs 1 --output-dir runs/week1_reproduction
+```
+
+实际本次运行分为分类头训练与从最佳权重初始化的微调两步；历史和配置保留在 `runs/week1_cpu_resnet18` 与 `runs/week1_resnet18`。
 
 | 类别编号 | 标签 | 中文名称 |
 | ---: | --- | --- |
@@ -24,7 +38,7 @@ MirrorSpace × AIE3905 课程项目。输入单个抓取区域的 RGB 图像，�
 
 ## 环境
 
-本机使用 Python 3.11，第一周基线已在 CPU 版 PyTorch 上跑通。新环境在 Windows PowerShell 中可按以下方式安装：
+完整基线使用项目 `.venv`（Python 3.11 / PyTorch 2.8.0+cpu）。已有 `C:\Users\17619\miniconda3\envs\GPU\python.exe` 是 Python 3.12.12 / PyTorch 2.9.1+cu128，已完成小样本 GPU 训练。显卡当前连续运算较慢，完整基线采用 CPU；实际环境与证据见 `docs/gpu_environment.md`。新 CPU 环境在 Windows PowerShell 中可按以下方式安装：
 
 ```powershell
 py -3.11 -m venv .venv
@@ -39,7 +53,14 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m material_recognition.download_weights
 ```
 
-完整数据训练建议从 [PyTorch 官方安装页](https://docs.pytorch.org/get-started/locally/)选择与本机显卡匹配的 CUDA 安装命令；CUDA 安装包较大。CPU 也能运行，但完整训练会明显更慢。
+已有 GPU 环境无需重新下载 CUDA 包；训练前应验证实际前向与反向运算：
+
+```powershell
+& 'C:\Users\17619\miniconda3\envs\GPU\python.exe' scripts/check_gpu.py --timeout 60 --output docs/gpu_check.json
+& 'C:\Users\17619\miniconda3\envs\GPU\python.exe' -m material_recognition.train --device cuda --manifest data/processed/minc5_probe/manifest.csv --head-epochs 1 --full-epochs 1 --batch-size 16 --workers 0 --output-dir runs/gpu_probe_retry
+```
+
+`--device cuda` 会在 CUDA 不可用时报错，避免静默使用 CPU。完整数据建议在显卡运行状态恢复后训练，保留测试集供方案冻结后的评估使用。
 
 ## 第一周流程
 
