@@ -10,3 +10,15 @@ runs/
 models/
 .tools/
 deliverables/qa/
+
+data/映界_rgbd数据/
+data/映界_rgbd数据.7z
+/output/
+
+# Local enterprise assets and annotations; keep only onboarding templates.
+data/enterprise/*
+!data/enterprise/README.md
+!data/enterprise/manifest.template.csv
+.env
+.env.*
+*.safetensors

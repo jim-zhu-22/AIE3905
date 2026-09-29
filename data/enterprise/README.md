@@ -1,16 +1,25 @@
 # 企业数据接入
 
-本目录用于企业现场数据的本地适配。原始图像、标注和训练结果不要直接提交到公开仓库。
+本目录保留接入说明与空清单模板。原始图像、已填标注、训练结果和模型权重仅在项目内部共享，不提交到公开仓库。
 
-目标是产生与公开数据一致的清单字段：
+## 当前数据与工具
 
-`sample_id,split,label,label_id,image_path,source,sku_id,batch_id,parent_image_id,roi_x1,roi_y1,roi_x2,roi_y2,annotation_status`
+已收到的产线数据默认放在 data/映界_rgbd数据/，共245对RGB与16位Depth。数据检查与浏览操作见 [操作 README](../../docs/OPERATIONS.md) 第4至7节。
 
-- `label` 对应 `paper`、`plastic`、`metal`、`wood`、`fabric`，标注实际接触表面。
-- `split` 使用 `train`、`validation` 或 `test`；同一 SKU 只能出现在其中一个集合。
-- 同一原图或连续帧派生的 ROI 要保持在同一集合；`parent_image_id` 供清单检查阻止同一原图跨集合泄漏。
-- `annotation_status` 使用 `confirmed` 表示人工确认；其他状态暂不进入训练或正式评估。
-- `image_path` 是相对于清单所在目录的路径。若保存的是已裁剪 ROI，坐标可留空。
+浏览器可以导出物体框、抓取接触面框、SKU和材质标注草稿。全部记录标记needs_review，尚不等于已复核训练样本。当前只有原有4个试跑区域经用户确认标签，不代表整批数据完成标注。
 
-现有标注工具的导出格式尚未提供。收到样例后再编写适配器并做标签质检。
-具体边界案例见 `docs/annotation_guideline.md`。
+## 训练清单约定
+
+空模板为本目录的manifest.template.csv，字段包括：
+
+~~~text
+sample_id,split,label,label_id,image_path,source,sku_id,batch_id,parent_image_id,roi_x1,roi_y1,roi_x2,roi_y2,annotation_status
+~~~
+
+- label对应paper、plastic、metal、wood、fabric，按实际接触外表面标注。
+- split为train、validation或test；同SKU、同源帧及关联序列不得跨集合泄漏。
+- annotation_status为confirmed表示完成复核，未确认的标注不进入训练。
+- image_path相对清单所在目录解析；当前训练读取器读取整张所指图像，不会按ROI坐标自动裁剪，所以应先保存接触面裁剪图。
+- 浏览器草稿尚未实现自动转换为训练清单。物体框与接触面框也不能代替实例Mask。
+
+接触面材质边界见 [标注规范](../../docs/annotation_guideline.md)。完整Geometry与物理属性annotation schema仍属于Milestone 1待统一范围。深度单位、RGB与Depth对齐和相机参数尚未确认。
