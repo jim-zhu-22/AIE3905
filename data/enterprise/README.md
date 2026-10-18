@@ -22,4 +22,4 @@ sample_id,split,label,label_id,image_path,source,sku_id,batch_id,parent_image_id
 - image_path相对清单所在目录解析；当前训练读取器读取整张所指图像，不会按ROI坐标自动裁剪，所以应先保存接触面裁剪图。
 - 浏览器草稿尚未实现自动转换为训练清单。物体框与接触面框也不能代替实例Mask。
 
-接触面材质边界见 [标注规范](../../docs/annotation_guideline.md)。完整Geometry与物理属性annotation schema仍属于Milestone 1待统一范围。深度单位、RGB与Depth对齐和相机参数尚未确认。
+接触面材质边界见 [标注规范](../../docs/annotation_guideline.md)。完整实例、Geometry 与形变属性的待审定格式见 [实例标注 Schema v1](../../docs/annotation_schema_v1.md)。深度单位、RGB与Depth对齐和相机参数尚未确认。

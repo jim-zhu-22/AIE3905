@@ -1,6 +1,0 @@
-{
-  "status": "passed",
-  "stdout": "{\"python\": \"3.12.12\", \"torch\": \"2.9.1+cu128\", \"torchvision\": \"0.24.1+cu128\", \"cuda_runtime\": \"12.8\", \"available\": true}\n{\"gpu\": \"NVIDIA GeForce RTX 4050 Laptop GPU\"}\n{\"status\": \"passed\", \"mode\": \"eval\", \"batch_size\": 2, \"compute_seconds\": 1.5579437999986112}\n",
-  "stderr": "",
-  "exit_code": 0
-}
