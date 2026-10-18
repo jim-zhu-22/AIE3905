@@ -1,5 +1,0 @@
-# Local results contain enterprise imagery and derived masks.
-/results/*
-!/results/README.md
-__pycache__/
-*.py[cod]
