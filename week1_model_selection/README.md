@@ -1,6 +1,6 @@
 # 谢嘉翔：独立检测与分割实践
 
-本目录是 2026-10-18 的独立交付，与项目根目录原有的 `scripts/run_segmentation*.py` 分开。公开代码包保留推理、网页接口、评估和预标注源码，以及不含企业图像的[实验汇总](evaluation_summary_20261018.json)；选型结论见上一级的[谢嘉翔实测报告](../RGBD小物体实例分割模型选型实测报告_谢嘉翔.md)。原始企业 RGB-D 数据、标注工具和运行生成的 `results/` 不在公开包内。
+本目录是 2026-10-18 的第一周模型选型独立交付，与项目根目录原有的 `scripts/run_segmentation*.py` 分开。公开代码包保留推理、网页接口、评估和预标注源码，以及不含企业图像的[实验汇总](evaluation_summary_20261018.json)；选型结论见上一级的[谢嘉翔实测报告](../RGBD小物体实例分割模型选型实测报告_谢嘉翔.md)。原始企业 RGB-D 数据、标注工具和运行生成的 `results/` 不在公开包内。
 
 这套代码独立于同学的 `scripts/run_segmentation*.py`。同一 Grounding DINO Tiny + SAM 2.1 Tiny 权重比较整图检测和固定 2×2 裁剪检测。两种模式都在原图上调用一次 SAM，输出原图尺寸的 Mask，因此 A/B 的主要变量是检测输入的尺度。当前两模型均使用 RGB；Depth 不参与本次预训练模型推理。
 
@@ -11,7 +11,7 @@
 以下命令从项目根目录执行。先进入本目录，再安装依赖：
 
 ```powershell
-Set-Location .\independent_detection_segmentation_Jason_20261018
+Set-Location .\week1_model_selection
 ..\.venv\Scripts\python.exe -m pip install torch torchvision
 ..\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```

@@ -23,9 +23,9 @@ Set-Location AIE3905
 
 - 结论报告：[RGBD 小物体实例分割模型选型实测报告](RGBD小物体实例分割模型选型实测报告_谢嘉翔.md)
 - 首轮对照：[第一轮模型选型对比报告](第一轮模型选型对比报告_20261018.md)
-- 独立实现：[Jason 独立检测与分割代码包](independent_detection_segmentation_Jason_20261018/README.md)
-- 模型与版本：[模型清单](independent_detection_segmentation_Jason_20261018/MODEL_MANIFEST.md)
-- 脱敏证据：[实验汇总 JSON](independent_detection_segmentation_Jason_20261018/evaluation_summary_20261018.json)
+- 独立实现：[第一周模型选型代码包](week1_model_selection/README.md)
+- 模型与版本：[模型清单](week1_model_selection/MODEL_MANIFEST.md)
+- 脱敏证据：[实验汇总 JSON](week1_model_selection/evaluation_summary_20261018.json)
 
 当前阶段基线为 Grounding DINO Tiny + SAM 2.1 Tiny，默认整图检测后以框提示原图实例分割。报告中的匹配数是待复核框上的探索性证据，不是正式精度；企业原始 RGB-D 数据、标注和运行生成结果不纳入仓库。SAM 2.1 Tiny 权重通过 Git LFS 管理，DINO 权重按模型清单从 Hugging Face 固定修订下载。
 

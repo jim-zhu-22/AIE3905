@@ -4,7 +4,7 @@
 
 汇报人：谢嘉翔
 
-本报告以项目技术规范书的检测与分割任务为交付依据，以2026年10月13日选型推荐报告为方案参考，核对[独立检测与分割实现](independent_detection_segmentation_Jason_20261018/README.md)及其本机实测结果。本文只对已经运行的配置作实测判断；未运行的候选模型保留为后续对照。
+本报告以项目技术规范书的检测与分割任务为交付依据，以2026年10月13日选型推荐报告为方案参考，核对[独立检测与分割实现](week1_model_selection/README.md)及其本机实测结果。本文只对已经运行的配置作实测判断；未运行的候选模型保留为后续对照。
 
 ## 一 给企业的明确结论
 
@@ -49,7 +49,7 @@
 | SAM 输入 | 原图 RGB＋A 的框 | 原图 RGB＋B 去重后的框 |
 | 输出 | 逐实例原图 Mask、叠加图、JSON | 同左，另记录 `source_tiles` |
 
-两组都在原图上调用一次 SAM，因此此实验检验的是**检测输入策略**，不是“整图 SAM 对比裁剪 SAM”。固定裁剪有重叠，但边缘物体仍可能被截断；跨块 box NMS 也可能合并相邻实例。实现见 [`pipeline.py`](independent_detection_segmentation_Jason_20261018/segmentation_practice/pipeline.py) 和[批量入口](independent_detection_segmentation_Jason_20261018/scripts/run_own_segmentation.py)。
+两组都在原图上调用一次 SAM，因此此实验检验的是**检测输入策略**，不是“整图 SAM 对比裁剪 SAM”。固定裁剪有重叠，但边缘物体仍可能被截断；跨块 box NMS 也可能合并相邻实例。实现见 [`pipeline.py`](week1_model_selection/segmentation_practice/pipeline.py) 和[批量入口](week1_model_selection/scripts/run_own_segmentation.py)。
 
 本次本机环境为 Windows、Python 3.12.8、PyTorch 2.14.1+cpu、Transformers 5.20.1、Ultralytics 8.4.182。SAM 权重为 `sam2.1_t.pt`，保存结果中的 SHA-256 是 `3c1e81ca9b037dd39d70a014ddb9a813d6c4c4e12555420db7eaff31689bd4e3`。原始结果记录的 DINO `detector_revision` 为 `unknown`；交付代码现已将检测器固定到 Hugging Face 修订 `a2bb814dd30d776dcf7e30523b00659f4f141c71`，并在模型清单中记录权重哈希。原始实验的版本仍只能依据本机缓存追溯，复跑结果需单独记录，不能当作原始结果。
 
@@ -71,7 +71,7 @@
 
 逐帧参考框匹配为：A 组 `20/27、20/24、25/25、32/32`；B 组 `20/27、20/24、22/25、32/32`。B 在前两帧找回部分 A 未匹配的草稿目标，但同时失去同样数量的 A 已匹配目标；第三帧额外失去 3 个。四帧合计 B 净少匹配 3 个。**预测实例增加 33 个，不等于真实目标增加 33 个。**
 
-五帧两模式合计保存了 307 张非空、1280×960 的实例 Mask（A 组 134 张，B 组 173 张）。这是输出格式和尺寸检查，不是轮廓准确率。网页 HTTP 实测一次整图请求返回 25 个实例、总耗时约 19.9 秒，证实按钮确实触发模型；它尚不满足可直接宣称“实时”的延迟证据。公开仓库仅保留[去除企业路径和逐帧图像的汇总数据](independent_detection_segmentation_Jason_20261018/evaluation_summary_20261018.json)；逐帧 JSON、诊断图、叠加图和 Mask 属于本机中间产物，不随代码上传。
+五帧两模式合计保存了 307 张非空、1280×960 的实例 Mask（A 组 134 张，B 组 173 张）。这是输出格式和尺寸检查，不是轮廓准确率。网页 HTTP 实测一次整图请求返回 25 个实例、总耗时约 19.9 秒，证实按钮确实触发模型；它尚不满足可直接宣称“实时”的延迟证据。公开仓库仅保留[去除企业路径和逐帧图像的汇总数据](week1_model_selection/evaluation_summary_20261018.json)；逐帧 JSON、诊断图、叠加图和 Mask 属于本机中间产物，不随代码上传。
 
 ### 可追查的失败案例
 
@@ -108,7 +108,7 @@
 | 漏检误检与分割评估 | 草稿框一对一匹配、逐帧诊断图及人工 Mask 评估程序已具备 | 取得整帧完整且人工确认的真值后，才可生成正式 TP/FN/FP、Mask IoU/Dice 与小目标分组结果 |
 | 实时性 | 本机 CPU 的阶段耗时和一次 HTTP 调用已有记录 | 在目标 GPU 上预热后至少 30 次请求统计 p50/p95、显存及冷启动，并与团队确定的时延要求比较 |
 
-源码入口：[网页服务](independent_detection_segmentation_Jason_20261018/scripts/segmentation_web.py)、[预标注导出](independent_detection_segmentation_Jason_20261018/scripts/export_segmentation_preannotations.py)、[人工 Mask 评估](independent_detection_segmentation_Jason_20261018/scripts/evaluate_confirmed_masks.py)。独立网页是模块演示入口，尚未等同于项目统一 RGB-D 全链路。
+源码入口：[网页服务](week1_model_selection/scripts/segmentation_web.py)、[预标注导出](week1_model_selection/scripts/export_segmentation_preannotations.py)、[人工 Mask 评估](week1_model_selection/scripts/evaluate_confirmed_masks.py)。独立网页是模块演示入口，尚未等同于项目统一 RGB-D 全链路。
 
 ## 七 下一轮实验与最终决策条件
 
@@ -122,7 +122,7 @@
 以下命令以**本报告所在的项目根目录**为当前目录。准备原始数据、`.venv/` 环境和项目根目录下的 `sam2.1_t.pt` 后，进入独立目录执行：
 
 ```powershell
-Set-Location .\independent_detection_segmentation_Jason_20261018
+Set-Location .\week1_model_selection
 ..\.venv\Scripts\python.exe scripts\run_own_segmentation.py --mode both
 ..\.venv\Scripts\python.exe scripts\export_segmentation_preannotations.py
 node scripts\validate_preannotations.js
@@ -132,8 +132,8 @@ node scripts\validate_preannotations.js
 服务运行期间，在**另一个终端**从项目根目录执行以下检查：
 
 ```powershell
-Set-Location .\independent_detection_segmentation_Jason_20261018
+Set-Location .\week1_model_selection
 ..\.venv\Scripts\python.exe scripts\check_segmentation_web.py
 ```
 
-完整运行方法见[独立目录 README](independent_detection_segmentation_Jason_20261018/README.md)。运行后生成的 `independent_detection_segmentation_Jason_20261018/results/` 包含企业画面及衍生 Mask，由该目录的 `.gitignore` 排除；公开材料只引用去标识的汇总数字。项目根目录 `scripts/` 的默认数据和权重路径与本工作区现状不一致，首轮结果作为历史记录引用，复跑前需要修正路径并固定环境。
+完整运行方法见[第一周模型选型代码包 README](week1_model_selection/README.md)。运行后生成的 `week1_model_selection/results/` 包含企业画面及衍生 Mask，由该目录的 `.gitignore` 排除；公开材料只引用去标识的汇总数字。项目根目录 `scripts/` 的默认数据和权重路径与本工作区现状不一致，首轮结果作为历史记录引用，复跑前需要修正路径并固定环境。
