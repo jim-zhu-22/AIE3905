@@ -1,0 +1,35 @@
+{
+  "evaluation_status": "exploratory_bbox_only",
+  "annotation_status": "needs_review",
+  "frame_completeness": "unconfirmed",
+  "ground_truth_masks_available": false,
+  "annotated_frames": 4,
+  "unlabeled_pipeline_frames": 1,
+  "draft_box_count": 108,
+  "matching": "one-to-one global-greedy box IoU >= 0.5",
+  "detector": "IDEA-Research/grounding-dino-tiny",
+  "segmenter": "sam2.1_t.pt",
+  "prompt": "box. bag. bottle. carton. packet.",
+  "box_threshold": 0.25,
+  "text_threshold": 0.2,
+  "device": "cpu",
+  "modes": {
+    "full": {
+      "predicted_instances_on_annotated_frames": 110,
+      "matched_draft_boxes": 97,
+      "unmatched_draft_boxes": 11,
+      "unmatched_predictions": 13,
+      "mean_total_latency_ms_on_5_frames": 21107.68,
+      "saved_full_resolution_nonempty_masks_on_5_frames": 134
+    },
+    "tiled": {
+      "predicted_instances_on_annotated_frames": 143,
+      "matched_draft_boxes": 94,
+      "unmatched_draft_boxes": 14,
+      "unmatched_predictions": 49,
+      "mean_total_latency_ms_on_5_frames": 63959.8,
+      "saved_full_resolution_nonempty_masks_on_5_frames": 173
+    }
+  },
+  "note": "Sanitized aggregate of a local experiment. Source images, per-frame predictions, overlays, masks, and absolute paths are excluded from the public package. Counts against draft boxes are not formal accuracy metrics."
+}
