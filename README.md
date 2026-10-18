@@ -6,6 +6,8 @@ MirrorSpace × AIE3905 课程项目。目标是接收 RGB-D 图像及目标 Prom
 
 ## 从这里开始
 
+Milestone 1 已形成待审定的 [系统设计 v1](docs/system_design_v1.md)、[实例标注 Schema v1](docs/annotation_schema_v1.md) 和 [基线与评估计划 v1](docs/baseline_plan_v1.md)。其中 taxonomy、相机元数据和试标结果仍需与数据/应用方确认；文档不代表端到端 pipeline 已实现。
+
 **[操作 README](docs/OPERATIONS.md)** 包含环境安装、数据与权重准备、训练、推理、浏览器框选、JSON 草稿导出和产线测试复现命令。所有命令在仓库根目录执行。
 
 ~~~powershell
@@ -13,7 +15,19 @@ git clone https://github.com/jim-zhu-22/AIE3905.git
 Set-Location AIE3905
 ~~~
 
-已有项目成员先更新自己的代码；数据和模型文件需单独准备，不随 Git 下载。
+已有项目成员先更新自己的代码；企业数据需单独准备，SAM 2.1 Tiny 权重通过 Git LFS 下载，DINO 权重按模型清单准备。
+
+## 本轮检测与分割成果
+
+本轮模型选型已经从候选方案收敛为可复现的阶段性基线：
+
+- 结论报告：[RGBD 小物体实例分割模型选型实测报告](RGBD小物体实例分割模型选型实测报告_谢嘉翔.md)
+- 首轮对照：[第一轮模型选型对比报告](第一轮模型选型对比报告_20261018.md)
+- 独立实现：[Jason 独立检测与分割代码包](independent_detection_segmentation_Jason_20261018/README.md)
+- 模型与版本：[模型清单](independent_detection_segmentation_Jason_20261018/MODEL_MANIFEST.md)
+- 脱敏证据：[实验汇总 JSON](independent_detection_segmentation_Jason_20261018/evaluation_summary_20261018.json)
+
+当前阶段基线为 Grounding DINO Tiny + SAM 2.1 Tiny，默认整图检测后以框提示原图实例分割。报告中的匹配数是待复核框上的探索性证据，不是正式精度；企业原始 RGB-D 数据、标注和运行生成结果不纳入仓库。SAM 2.1 Tiny 权重通过 Git LFS 管理，DINO 权重按模型清单从 Hugging Face 固定修订下载。
 
 ## 已完成的功能
 
@@ -57,6 +71,6 @@ Set-Location AIE3905
 - 详细操作：[操作 README](docs/OPERATIONS.md)。
 - 旧十周材质识别规划保留于 [历史项目规划](docs/project_plan.md)，当前整体范围以上述八周里程碑为准。
 
-企业原始数据、标注、模型权重和 output 结果仅保存在本地，不进入仓库。新生成的测试结果统一写入 output/。仅凭克隆代码不能重现企业测试，需通过项目内部渠道取得相应数据及权重，或按照操作文档自行训练。
+企业原始数据、标注和 output 结果仅保存在本地，不进入仓库。新生成的测试结果统一写入 output/。SAM 2.1 Tiny 交付权重随仓库的 Git LFS 指针管理；DINO 权重仍需按模型清单下载。仅凭克隆代码不能重现企业测试，仍需通过项目内部渠道取得相应数据，或按照操作文档自行训练。
 
 代码尚未声明开源许可证；公开数据和预训练权重分别遵循各自使用条款。
