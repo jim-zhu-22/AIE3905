@@ -22,3 +22,8 @@ data/enterprise/*
 .env
 .env.*
 *.safetensors
+
+# Chad 企业数据（仅本地，不推送到 GitHub）
+data/Chad_frames_002-005_20261013/
+data/chad_dataset.zip
+mobileclip_blt.ts
