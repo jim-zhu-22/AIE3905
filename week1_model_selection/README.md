@@ -1,6 +1,6 @@
 # 谢嘉翔：独立检测与分割实践
 
-本目录是 2026-10-18 的第一周模型选型独立交付，与项目根目录原有的 `scripts/run_segmentation*.py` 分开。公开代码包保留推理、网页接口、评估和预标注源码，以及不含企业图像的[实验汇总](evaluation_summary_20261018.json)；选型结论见上一级的[谢嘉翔实测报告](../RGBD小物体实例分割模型选型实测报告_谢嘉翔.md)。原始企业 RGB-D 数据、标注工具和运行生成的 `results/` 不在公开包内。
+本目录是 2026-10-18 的第一周模型选型独立交付，与项目根目录原有的 `scripts/run_segmentation*.py` 分开。公开代码包保留推理、网页接口、评估和预标注源码，以及不含企业图像的[实验汇总](evaluation_summary_20261018.json)；选型结论见上一级的[谢嘉翔实测报告](../第一轮模型选型对比报告_谢嘉翔.md)。原始企业 RGB-D 数据、标注工具和运行生成的 `results/` 不在公开包内。
 
 这套代码独立于同学的 `scripts/run_segmentation*.py`。同一 Grounding DINO Tiny + SAM 2.1 Tiny 权重比较整图检测和固定 2×2 裁剪检测。两种模式都在原图上调用一次 SAM，输出原图尺寸的 Mask，因此 A/B 的主要变量是检测输入的尺度。当前两模型均使用 RGB；Depth 不参与本次预训练模型推理。
 
@@ -18,7 +18,7 @@ Set-Location .\week1_model_selection
 
 本机以上述命令安装得到 PyTorch 2.14.1+cpu，用于流程验证。目标机器如需 CUDA，请按 [PyTorch 官方安装页](https://docs.pytorch.org/get-started/locally/)选择与设备相符的命令，在独立环境安装。不要把本机 GTX 1050 Ti 4GB 的速度当作目标设备速度。
 
-首次准备模型时按[模型清单](MODEL_MANIFEST.md)取得固定版本的 `IDEA-Research/grounding-dino-tiny` 和 `sam2.1_t.pt`。SAM 权重放在上一级项目目录，或用 `--sam-weight` 指定本地路径。SAM 2.1 Tiny 交付权重随仓库根目录的 Git LFS 管理；DINO 权重仍按模型清单下载并核对哈希。网络受限且缓存完整时，在运行前设置 `$env:HF_HUB_OFFLINE='1'`。
+首次准备模型时按[模型清单](MODEL_MANIFEST.md)取得固定版本的 `IDEA-Research/grounding-dino-tiny` 和 `sam2.1_t.pt`。SAM 权重放在本目录，或用 `--sam-weight` 指定本地路径。SAM 2.1 Tiny 交付权重随本目录的 Git LFS 管理；DINO 权重仍按模型清单下载并核对哈希。网络受限且缓存完整时，在运行前设置 `$env:HF_HUB_OFFLINE='1'`。
 
 ## 批量实验
 
