@@ -1,5 +1,4 @@
 .venv/
-.model_cache/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -27,10 +26,4 @@ data/enterprise/*
 # Chad 企业数据（仅本地，不推送到 GitHub）
 data/Chad_frames_002-005_20261013/
 data/chad_dataset.zip
-Chad_frames_002-005_20261013/
-Chad_frames_002-005_dataset_20261013.zip
-AIE3905_Annotation_Kit/
 mobileclip_blt.ts
-
-# The selected SAM 2.1 Tiny delivery weight is tracked with Git LFS.
-!sam2.1_t.pt

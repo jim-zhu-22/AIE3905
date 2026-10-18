@@ -18,7 +18,7 @@ Set-Location .\independent_detection_segmentation_Jason_20261018
 
 本机以上述命令安装得到 PyTorch 2.14.1+cpu，用于流程验证。目标机器如需 CUDA，请按 [PyTorch 官方安装页](https://docs.pytorch.org/get-started/locally/)选择与设备相符的命令，在独立环境安装。不要把本机 GTX 1050 Ti 4GB 的速度当作目标设备速度。
 
-首次准备模型时按[模型清单](MODEL_MANIFEST.md)取得固定版本的 `IDEA-Research/grounding-dino-tiny` 和 `sam2.1_t.pt`。SAM 权重放在上一级项目目录，或用 `--sam-weight` 指定本地路径。SAM 2.1 Tiny 交付权重随仓库根目录的 Git LFS 管理；DINO 权重仍按模型清单下载并核对哈希。网络受限且缓存完整时，在运行前设置 `$env:HF_HUB_OFFLINE='1'`。
+首次准备模型时按[模型清单](MODEL_MANIFEST.md)取得固定版本的 `IDEA-Research/grounding-dino-tiny` 和 `sam2.1_t.pt`。SAM 权重放在上一级项目目录，或用 `--sam-weight` 指定本地路径。本机原有权重与缓存保留；权重二进制不上传 GitHub，复现时须按模型清单下载并核对哈希。网络受限且缓存完整时，在运行前设置 `$env:HF_HUB_OFFLINE='1'`。
 
 ## 批量实验
 
