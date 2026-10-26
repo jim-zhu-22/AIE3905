@@ -17,6 +17,53 @@ Set-Location AIE3905
 
 已有项目成员先更新自己的代码；企业数据需单独准备，SAM 2.1 Tiny 权重通过 Git LFS 下载，DINO 权重按模型清单准备。
 
+## API 封装
+
+项目已提供一个基于 FastAPI 的本地 HTTP API，将已有的 `pipeline-1.0` 分割结果和后续感知任务统一封装。API 当前支持两种使用方式：
+
+- **已有成果查询**：读取导入的分割成果包，返回实例、类别、整数框、Mask 引用、叠加图和报告下载地址。
+- **新图片与统一感知入口**：`POST /v1/segment/upload` 接收 PNG/JPEG 图片和目标 Prompt；`POST /v1/perceive` 以后台任务方式编排分割及已配置的属性模块，完成后通过任务接口查询结果。
+
+### 启动 API
+
+在仓库根目录执行以下命令。默认使用 `archive` 模式，仅读取已有成果；需要真实模型推理时使用 `model` 模式，并提供已安装模型依赖和权重的 Python 环境。
+
+```powershell
+python -m venv .venv-api
+.\.venv-api\Scripts\python.exe -m pip install -r api_service\requirements.lock
+powershell -ExecutionPolicy Bypass -File .\scripts\start_api.ps1
+```
+
+启动后可访问：
+
+| 地址 | 用途 |
+| --- | --- |
+| `http://127.0.0.1:8000/` | 本地演示工作台 |
+| `http://127.0.0.1:8000/docs` | Swagger 交互式 API 文档 |
+| `GET /health`、`GET /v1/app/ready` | 服务和任务工作区状态 |
+| `GET /v1/capabilities`、`GET /v1/modules` | 能力及属性模块状态 |
+
+### 主要接口
+
+| 方法和路径 | 用途 |
+| --- | --- |
+| `GET /v1/examples` | 查看已导入成果清单 |
+| `GET /v1/examples/{sample_id}` | 读取已有 `pipeline-1.0` 分割结果 |
+| `POST /v1/segment` | 使用 Base64 JSON 提交单张图片分割 |
+| `POST /v1/segment/upload` | 以 multipart 表单直接上传图片进行分割 |
+| `POST /v1/perceive` | 提交 RGB、Prompt、可选 Depth 和模块列表，返回后台任务编号 |
+| `GET /v1/jobs/{job_id}` | 查询任务状态 |
+| `GET /v1/jobs/{job_id}/result` | 获取已完成的 `perception-1.0` 结果 |
+| `GET /v1/jobs/{job_id}/artifacts/{relative}` | 下载任务生成的 JSON、Mask、报告或图片 |
+
+`/v1/perceive` 的任务成功返回 HTTP 202；属性模块通过 `api_service/modules.local.json` 配置，可使用仓库内置的 Python、command 或 HTTP adapter。Depth 当前只校验并保存元数据，不进行像素处理或物理尺寸测量。模型未准备好时接口会明确返回 503，不会用已有样例冒充新推理结果。
+
+更完整的启动、调用、模块扩展和 Docker 说明见 [API 接入与启动文档](docs/app_integration.md)；API 原型说明见 [api_service/README.md](api_service/README.md)。API 测试可使用：
+
+```powershell
+.\.venv-api\Scripts\python.exe -X utf8 -m unittest discover -s tests -p test_api_service.py -v
+```
+
 ## 本轮检测与分割成果
 
 本轮模型选型已经从候选方案收敛为可复现的阶段性基线：

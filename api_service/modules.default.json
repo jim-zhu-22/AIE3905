@@ -1,0 +1,7 @@
+{
+  "modules": [
+    {"id":"material","title":"材质识别","enabled":false,"adapter":"material","options":{"checkpoint":"runs/week1_resnet18/best.pt"}},
+    {"id":"geometry","title":"几何属性","enabled":false,"adapter":"python","factory":"api_service.extensions.example_geometry:create_adapter"},
+    {"id":"physical","title":"物理属性","enabled":false,"adapter":"command","command":["python","-m","api_service.extensions.command_template","--request","{request}","--response","{response}"]}
+  ]
+}

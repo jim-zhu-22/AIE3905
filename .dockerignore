@@ -1,0 +1,7 @@
+**
+!api_service/
+!api_service/**
+api_service/__pycache__/
+!docs/
+!docs/app_integration.md
+!docs/app_progress_20261026.md

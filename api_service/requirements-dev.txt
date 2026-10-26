@@ -1,0 +1,4 @@
+-r requirements.lock
+httpx==0.28.1
+numpy==2.3.5
+packaging==26.3

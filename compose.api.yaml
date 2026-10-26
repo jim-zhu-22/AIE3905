@@ -1,0 +1,22 @@
+services:
+  segmentation-api:
+    build:
+      context: .
+      dockerfile: api_service/Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      AIE_API_MODE: archive
+      AIE_API_DATA_DIR: /data
+    read_only: true
+    user: "${AIE_UID:-10001}:${AIE_GID:-10001}"
+    init: true
+    tmpfs:
+      - /tmp:size=64m
+    volumes:
+      - type: bind
+        source: ./output/api
+        target: /data
+        read_only: false
+        bind:
+          create_host_path: false
