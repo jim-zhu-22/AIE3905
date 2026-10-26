@@ -5,6 +5,7 @@ COPY api_service/requirements.lock /app/api_service/requirements.lock
 RUN pip install --no-cache-dir -r /app/api_service/requirements.lock
 COPY api_service /app/api_service
 COPY docs/app_integration.md docs/app_progress_20261026.md /app/docs/
+COPY docs/local_inference.md docs/continuous_input.md /app/docs/
 RUN useradd --uid 10001 --create-home apiuser
 USER 10001:10001
 EXPOSE 8000

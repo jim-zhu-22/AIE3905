@@ -1,5 +1,6 @@
 .venv/
 .venv-api/
+.venv-model/
 api_service/modules.local.json
 .model_cache/
 __pycache__/
@@ -12,11 +13,10 @@ runs/
 *.pth
 models/
 .tools/
-deliverables/qa/
-deliverables/api_progress_20261026.zip
-deliverables/api_progress_20261026_v02.zip
-deliverables/AIE_app_20261026_v03.zip
-deliverables/api_progress_20261026/
+/.workbuddy/
+/deliverables/
+workspace/
+workbody/
 
 data/映界_rgbd数据/
 data/映界_rgbd数据.7z
@@ -37,6 +37,3 @@ Chad_frames_002-005_20261013/
 Chad_frames_002-005_dataset_20261013.zip
 AIE3905_Annotation_Kit/
 mobileclip_blt.ts
-
-# The selected SAM 2.1 Tiny delivery weight is tracked with Git LFS.
-!sam2.1_t.pt

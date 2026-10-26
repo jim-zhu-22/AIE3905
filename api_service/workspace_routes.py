@@ -9,7 +9,7 @@ from typing import Annotated
 from uuid import uuid4
 from zipfile import ZipFile, ZIP_DEFLATED
 
-from fastapi import File, Form, Query, Request, UploadFile
+from fastapi import File, Form, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from PIL import Image
@@ -20,13 +20,17 @@ from .errors import fail
 from .images import decode_bytes
 from .import_sample import import_sample
 from .schemas import DepthMetadata, Identifier, MAX_IMAGE_BYTES, SegmentOptions, SegmentationResult
-from .workspace import JobInfo, JobPage, PerceptionResult, SampleJob
+from .workspace import IdempotencyConflict, JobInfo, JobPage, PerceptionResult, SampleJob, submission_fingerprint
 
 
 def register_workspace_routes(api, settings):
     @api.get("/v1/integration-guide", tags=["应用"])
     def integration_guide():
         return FileResponse(Path(__file__).resolve().parents[1] / "docs/app_integration.md", media_type="text/plain; charset=utf-8")
+
+    @api.get("/v1/environment-guide", tags=["应用"])
+    def environment_guide():
+        return FileResponse(Path(__file__).resolve().parents[1] / "docs/local_inference.md", media_type="text/plain; charset=utf-8")
 
     @api.get("/v1/progress-report", tags=["应用"])
     def progress_report():
@@ -85,7 +89,8 @@ def register_workspace_routes(api, settings):
     def perceive(request: Request, rgb: Annotated[UploadFile, File()], prompt: Annotated[str, Form()],
                  frame_id: Annotated[str, Form()] = "uploaded_frame", mode: Annotated[str, Form()] = "full",
                  modules: Annotated[str, Form()] = "[]", meta: Annotated[str | None, Form()] = None,
-                 depth: Annotated[UploadFile | None, File()] = None):
+                 depth: Annotated[UploadFile | None, File()] = None,
+                 idempotency_key: Annotated[Identifier | None, Header(alias="Idempotency-Key")] = None):
         engine = workspace()
         try:
             raw_modules = json.loads(modules)
@@ -93,7 +98,8 @@ def register_workspace_routes(api, settings):
             depth_meta = DepthMetadata.model_validate_json(meta) if meta else DepthMetadata()
             options = SegmentOptions(frame_id=frame_id, prompt=prompt, mode=mode, depth=depth_meta)
             engine.validate_modules(selection)
-            image = decode_bytes(rgb.file.read(MAX_IMAGE_BYTES + 1))
+            rgb_raw = rgb.file.read(MAX_IMAGE_BYTES + 1)
+            image = decode_bytes(rgb_raw)
             depth_raw = None
             if depth is not None:
                 depth_raw = depth.file.read(MAX_IMAGE_BYTES + 1)
@@ -109,10 +115,16 @@ def register_workspace_routes(api, settings):
                     fail(400, "invalid_depth", "深度文件无法解码。")
                 options.depth = depth_meta.model_copy(update={"depth_path":"depth.png", "depth_size":list(image.size),
                                                               "depth_dtype":"uint16", "depth_usable":False})
+            fingerprint = submission_fingerprint(options,selection,rgb_raw,depth_raw)
+            replay = engine.store.replay(idempotency_key,fingerprint)
+            if replay is not None:
+                return replay
             if api.state.model is None:
                 fail(503, "model_not_ready", "模型尚未启用，当前只能处理已有样例。", retry_after=5)
             return engine.submit(source="upload", options=options, modules=selection, request_id=request.state.request_id,
-                                 image=image, depth=depth_raw)
+                                 image=image, depth=depth_raw, client_key=idempotency_key, fingerprint=fingerprint)
+        except IdempotencyConflict:
+            fail(409,"idempotency_conflict","提交编号已用于另一张图片或另一组参数，请生成新编号。")
         except ValidationError as exc:
             raise RequestValidationError(exc.errors()) from exc
         except json.JSONDecodeError:

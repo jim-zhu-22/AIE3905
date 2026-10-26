@@ -1,0 +1,3 @@
+# Install a matching torch/torchvision CPU or CUDA pair first; see local_inference.md.
+-r requirements.lock
+-r ../week1_model_selection/requirements.txt

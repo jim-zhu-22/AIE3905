@@ -65,3 +65,7 @@ CLI 的 request.json 包含同样的字段和 schema_version=module-1.0；respon
 Docker 配置仍待真实构建运行验证。容器根文件系统只读，但 output/api 数据挂载必须可写才能保存 SQLite、任务和结果；API 镜像只包含轻量依赖，模型运行环境另行准备。
 
 容器默认用户为 10001:10001。Linux 主机需让该用户可读写挂载目录，或通过 AIE_UID/AIE_GID 指定主机目录所有者的 UID/GID。容器健康检查访问 `/v1/app/ready`，检查任务工作区可用；旧 `/ready` 继续保留分割服务自身的就绪含义。
+
+## 连续图片输入（v0.4）
+
+新增多图排队上传、SSE 完成通知、幂等提交和其他程序接收客户端，见 `docs/continuous_input.md`。真实推理由下载者使用本地 CPU/GPU，安装与权重要求见 `docs/local_inference.md`；预检脚本不会安装或下载任何内容。

@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -22,6 +23,20 @@ from .storage import contained_file, load_bundle, staged_bundle
 
 LOG = logging.getLogger("aie.api")
 ACTIVE = {"queued", "running"}
+
+
+class IdempotencyConflict(ValueError):
+    """The caller reused a submission key for different input."""
+
+
+def submission_fingerprint(options, modules, rgb, depth=None):
+    digest = hashlib.sha256()
+    digest.update(json.dumps({"options":options.model_dump(mode="json"), "modules":modules},
+                             sort_keys=True, separators=(",", ":")).encode())
+    for content in (rgb, depth or b""):
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
 
 
 def now():
@@ -96,6 +111,14 @@ class JobStore:
                 source TEXT NOT NULL, frame_id TEXT NOT NULL, prompt TEXT NOT NULL, modules TEXT NOT NULL,
                 sample_id TEXT, stage TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
                 total INTEGER NOT NULL DEFAULT 0, error TEXT, request_id TEXT NOT NULL)""")
+            columns = {row[1] for row in db.execute("PRAGMA table_info(jobs)")}
+            for column in ("client_key", "fingerprint"):
+                if column not in columns:
+                    db.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
+            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS jobs_client_key ON jobs(client_key) WHERE client_key IS NOT NULL")
+            db.execute("""CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL,
+                data TEXT NOT NULL, created_at TEXT NOT NULL)""")
 
     @contextmanager
     def connect(self):
@@ -110,6 +133,8 @@ class JobStore:
     @staticmethod
     def public(row):
         item = dict(row)
+        item.pop("client_key", None)
+        item.pop("fingerprint", None)
         item["modules"] = json.loads(item["modules"])
         item["result_ref"] = f"/v1/jobs/{item['id']}/result" if item["status"] in {"completed", "partial"} else None
         return item
@@ -129,13 +154,48 @@ class JobStore:
         with self.connect() as db:
             return db.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('queued','running')").fetchone()[0]
 
-    def create(self, job_id, source, options, modules, sample_id, request_id):
+    def replay(self, client_key, fingerprint):
+        if client_key is None:
+            return None
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM jobs WHERE client_key=?", (client_key,)).fetchone()
+        if row is None:
+            return None
+        if row["fingerprint"] != fingerprint:
+            raise IdempotencyConflict("同一个提交编号对应了不同图片或参数，请使用新编号。")
+        return self.public(row)
+
+    def _emit(self, db, job_id):
+        row = db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+        if row is None:
+            return
+        cursor = db.execute("INSERT INTO events(job_id,data,created_at) VALUES (?,?,?)",
+                           (job_id,json.dumps(self.public(row),ensure_ascii=False),now()))
+        if cursor.lastrowid % 100 == 0:
+            db.execute("DELETE FROM events WHERE id<=?", (cursor.lastrowid - 10000,))
+
+    def event_snapshot(self):
+        with self.connect() as db:
+            db.execute("BEGIN")
+            cursor = db.execute("SELECT COALESCE(MAX(id),0) FROM events").fetchone()[0]
+            jobs = db.execute("SELECT * FROM jobs ORDER BY created_at DESC,id DESC LIMIT 100").fetchall()
+        return {"cursor":cursor,"jobs":[self.public(row) for row in jobs]}
+
+    def events_after(self, cursor, limit=100):
+        with self.connect() as db:
+            bounds = db.execute("SELECT MIN(id),MAX(id) FROM events").fetchone()
+            reset = (bounds[0] is not None and cursor < bounds[0] - 1) or cursor > (bounds[1] or 0)
+            rows = db.execute("SELECT id,data FROM events WHERE id>? ORDER BY id LIMIT ?", (cursor,limit)).fetchall()
+        return reset,[{"id":row["id"],"job":json.loads(row["data"])} for row in rows]
+
+    def create(self, job_id, source, options, modules, sample_id, request_id, client_key=None, fingerprint=None):
         stamp = now()
         with self.connect() as db:
-            db.execute("""INSERT INTO jobs (id,status,created_at,updated_at,source,frame_id,prompt,modules,sample_id,stage,request_id)
-                          VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            db.execute("""INSERT INTO jobs (id,status,created_at,updated_at,source,frame_id,prompt,modules,sample_id,stage,request_id,client_key,fingerprint)
+                          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                        (job_id, "queued", stamp, stamp, source, options.frame_id, options.prompt,
-                        json.dumps(modules), sample_id, "等待处理", request_id))
+                        json.dumps(modules), sample_id, "等待处理", request_id, client_key, fingerprint))
+            self._emit(db, job_id)
 
     def update(self, job_id, **changes):
         allowed = {"status", "stage", "done", "total", "error"}
@@ -145,17 +205,24 @@ class JobStore:
         with self.connect() as db:
             db.execute("UPDATE jobs SET " + ",".join(f"{key}=?" for key in changes) + " WHERE id=?",
                        (*changes.values(), job_id))
+            self._emit(db, job_id)
 
     def cancel(self, job_id):
         with self.connect() as db:
             cursor = db.execute("UPDATE jobs SET status='cancelled',stage='已取消',updated_at=? WHERE id=? AND status='queued'",
                                 (now(), job_id))
-            return cursor.rowcount == 1
+            changed = cursor.rowcount == 1
+            if changed:
+                self._emit(db, job_id)
+            return changed
 
     def claim(self, job_id):
         with self.connect() as db:
-            return db.execute("UPDATE jobs SET status='running',stage='读取输入',updated_at=? WHERE id=? AND status='queued'",
-                              (now(), job_id)).rowcount == 1
+            changed = db.execute("UPDATE jobs SET status='running',stage='读取输入',updated_at=? WHERE id=? AND status='queued'",
+                                 (now(), job_id)).rowcount == 1
+            if changed:
+                self._emit(db, job_id)
+            return changed
 
 
 class Workspace:
@@ -218,9 +285,13 @@ class Workspace:
         if len(set(modules)) != len(modules) or any(key not in self.registry.entries for key in modules):
             raise ValueError("模块列表包含重复项或未注册模块。")
 
-    def submit(self, *, source, options, modules, request_id, sample_id=None, image=None, depth=None):
+    def submit(self, *, source, options, modules, request_id, sample_id=None, image=None, depth=None,
+               client_key=None, fingerprint=None):
         self.validate_modules(modules)
         with self.submit_lock:
+            replay = self.store.replay(client_key, fingerprint)
+            if replay is not None:
+                return replay
             if self.store.active_count() >= self.max_pending:
                 raise OverflowError("任务队列已满，请稍后重试。")
             job_id = f"job_{uuid4().hex}"
@@ -246,7 +317,7 @@ class Workspace:
                         target.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copyfile(contained_file(sample, relative), target)
                     load_bundle(snapshot, check_pixels=True)
-                self.store.create(job_id, source, options, modules, sample_id, request_id)
+                self.store.create(job_id, source, options, modules, sample_id, request_id, client_key, fingerprint)
             except Exception:
                 if inputs.resolve().is_relative_to((self.root / "inputs").resolve()):
                     shutil.rmtree(inputs)

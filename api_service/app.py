@@ -30,10 +30,11 @@ from .storage import contained_file, load_bundle, staged_bundle
 from .modules import ModuleRegistry
 from .workspace import Workspace
 from .workspace_routes import register_workspace_routes
+from .events import register_event_route
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("aie.api")
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 
 @dataclass
@@ -318,6 +319,7 @@ def create_app(settings=None, *, model_factory=default_model, registry=None):
         return FileResponse(path, media_type=media_type)
 
     register_workspace_routes(api, settings)
+    register_event_route(api)
     return api
 
 

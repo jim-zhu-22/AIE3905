@@ -5,3 +5,5 @@ api_service/__pycache__/
 !docs/
 !docs/app_integration.md
 !docs/app_progress_20261026.md
+!docs/local_inference.md
+!docs/continuous_input.md
