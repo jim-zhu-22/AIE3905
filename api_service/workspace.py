@@ -15,11 +15,11 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from PIL import Image
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .modules import InstanceContext, ModulePrediction, ModuleRegistry
 from .schemas import DepthMetadata, ExecutionInfo, Identifier, InstanceResult, SegmentOptions
-from .storage import contained_file, load_bundle, staged_bundle
+from .storage import contained_file, load_bundle, staged_bundle, bundle_inputs
 
 LOG = logging.getLogger("aie.api")
 ACTIVE = {"queued", "running"}
@@ -58,7 +58,7 @@ class PerceptionResult(BaseModel):
     schema_version: Literal["perception-1.0"] = "perception-1.0"
     run_id: Identifier
     frame_id: str
-    status: Literal["ok", "partial", "no_target"]
+    status: Literal["ok", "partial", "no_match"]
     prompt: str
     image_size: list[int]
     instance_count: int
@@ -75,6 +75,12 @@ class PerceptionResult(BaseModel):
     report_ref: str
     json_ref: str
     download_ref: str
+    pipeline_result_ref: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_status(cls, value):
+        return {**value, "status": "no_match"} if isinstance(value, dict) and value.get("status") == "no_target" else value
 
 
 class JobInfo(BaseModel):
@@ -310,9 +316,11 @@ class Workspace:
                     if not sample.is_relative_to(parent):
                         raise ValueError("Invalid sample path")
                     result = load_bundle(sample, check_pixels=True)
+                    if image is not None and list(image.size) != result.image_size:
+                        raise ValueError("Supplied RGB does not match segmentation size")
                     snapshot = inputs / "sample"
                     snapshot.mkdir()
-                    for relative in {"segmentation.json", "report.md", "overlay.jpg"} | {i.mask_path for i in result.instances}:
+                    for relative in {"segmentation.json", "report.md", "overlay.jpg"} | {i.mask_path for i in result.instances} | bundle_inputs(sample, result)[2]:
                         target = snapshot / relative
                         target.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copyfile(contained_file(sample, relative), target)
@@ -348,6 +356,18 @@ class Workspace:
                                                              request_id=job["request_id"])
                     segmentation.depth.depth_usable = False
                     image_path = None
+                    original_rgb, original_depth, _ = bundle_inputs(sample, segmentation)
+                    if original_rgb and not (inputs / "rgb.png").is_file():
+                        with Image.open(contained_file(sample, original_rgb)) as rgb:
+                            rgb.convert("RGB").save(stage / "rgb.png")
+                        image_path = stage / "rgb.png"
+                    if original_depth and not (inputs / "depth.png").is_file():
+                        shutil.copyfile(contained_file(sample, original_depth), stage / "depth.png")
+                    if (inputs / "rgb.png").is_file():
+                        shutil.copyfile(inputs / "rgb.png", stage / "rgb.png")
+                        image_path = stage / "rgb.png"
+                    if image_path:
+                        segmentation.execution.rgb_binding = "caller_declared_same_frame_dimensions_checked"
                 else:
                     self.store.update(job_id, stage="目标检测与分割")
                     with Image.open(inputs / "rgb.png") as rgb:
@@ -355,17 +375,26 @@ class Workspace:
                     segmentation.execution.request_id = job["request_id"]
                     shutil.copyfile(inputs / "rgb.png", stage / "rgb.png")
                     image_path = stage / "rgb.png"
+                    segmentation.execution.rgb_binding = "same_inference_input"
                 depth_path = None
                 if (inputs / "depth.png").is_file():
                     shutil.copyfile(inputs / "depth.png", stage / "depth.png")
                     depth_path = stage / "depth.png"
+                elif (stage / "depth.png").is_file():
+                    depth_path = stage / "depth.png"
+                if depth_path:
+                    segmentation.depth.depth_path = "depth.png"
+                segmentation.rgb_path = "rgb.png" if image_path else None
+                segmentation.preprocess_ref = "preprocess.json"
+                segmentation.depth.processing_status = "reference_only"
+                segmentation.depth.depth_usable = False
                 prefix = f"/v1/jobs/{job_id}/artifacts"
                 for item in segmentation.instances:
                     item.mask_ref = f"{prefix}/{item.mask_path}"
                 segmentation.overlay_ref = f"{prefix}/overlay.jpg"
                 segmentation.report_ref = f"{prefix}/report.md"
                 segmentation.segmentation_ref = f"{prefix}/segmentation.json"
-                stages = {"segmentation": {"status": "ok", "source": job["source"],
+                stages = {"segmentation": {"status": segmentation.status, "source": job["source"],
                            "new_inference": segmentation.execution.new_inference}}
                 timings = {"segmentation": round((perf_counter() - started) * 1000, 2)}
                 instances = [PerceivedInstance.model_validate(item.model_dump()) for item in segmentation.instances]
@@ -385,6 +414,8 @@ class Workspace:
                             context = InstanceContext(job_id, item.instance_id, image_path, stage / item.mask_path,
                                 depth_path, item.bbox_xyxy, segmentation.depth.model_dump(), work_dir)
                             prediction = self.registry.analyze(module_id, context)
+                            if prediction.status in {"ok", "unknown"}:
+                                segmentation.execution.new_attribute_inference = True
                         item.attributes[module_id] = prediction
                         outputs.append(prediction.status)
                         done += 1
@@ -400,7 +431,7 @@ class Workspace:
                         raise ValueError("Unsafe module work directory")
                     shutil.rmtree(work_dir)
                 partial = any(item["status"] != "ok" for key, item in stages.items() if key != "segmentation")
-                status = "no_target" if not instances else ("partial" if partial else "ok")
+                status = "no_match" if not instances else ("partial" if partial else "ok")
                 result = PerceptionResult(run_id=job_id, frame_id=segmentation.frame_id, status=status,
                     prompt=segmentation.prompt, image_size=segmentation.image_size, instance_count=len(instances),
                     instances=instances, execution=segmentation.execution, depth=segmentation.depth, stages=stages,
@@ -408,7 +439,8 @@ class Workspace:
                     model_versions=versions, stage_latency_ms=timings,
                     overlay_ref=f"{prefix}/overlay.jpg", image_ref=f"{prefix}/rgb.png" if image_path else None,
                     depth_ref=f"{prefix}/depth.png" if depth_path else None,
-                    report_ref=f"{prefix}/report.md", json_ref=f"{prefix}/perception.json", download_ref=f"/v1/jobs/{job_id}/download")
+                    report_ref=f"{prefix}/report.md", json_ref=f"{prefix}/perception.json", download_ref=f"/v1/jobs/{job_id}/download",
+                    pipeline_result_ref=f"{prefix}/result.json")
                 (stage / "segmentation.json").write_text(segmentation.model_dump_json(indent=2), encoding="utf-8")
                 (stage / "perception.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
                 lines = [f"# RGB-D 感知任务 {job_id}", "", f"- 帧：{result.frame_id}", f"- 状态：{result.status}",
@@ -416,6 +448,8 @@ class Workspace:
                          "- 深度像素处理：未接入", "", "| 模块 | 状态 |", "| --- | --- |"]
                 lines += [f"| {key} | {value['status']} |" for key, value in stages.items()]
                 (stage / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+                from .pipeline_export import export_pipeline
+                export_pipeline(stage, segmentation, result)
             self.store.update(job_id, status="partial" if status == "partial" else "completed", stage="已完成", done=total, total=total)
         except Exception:
             LOG.exception("Workspace job failed job_id=%s request_id=%s", job_id, job["request_id"])
@@ -433,6 +467,9 @@ class Workspace:
             allowed.add("rgb.png")
         if (directory / "depth.png").is_file():
             allowed.add("depth.png")
+        if result.pipeline_result_ref:
+            from .pipeline_export import artifact_names
+            allowed |= artifact_names(directory)
         if relative not in allowed:
             raise ValueError("Undeclared artifact")
         return contained_file(directory, relative)

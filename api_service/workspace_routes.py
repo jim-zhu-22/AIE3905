@@ -138,6 +138,30 @@ def register_workspace_routes(api, settings):
             if depth is not None:
                 depth.file.close()
 
+    @api.post("/v1/jobs/from-sample", response_model=JobInfo, status_code=202, tags=["任务"])
+    def resume_sample(request: Request, sample_id: Annotated[str, Form()],
+                      rgb: Annotated[UploadFile, File()], modules: Annotated[str, Form()] = "[]"):
+        try:
+            payload = SampleJob(sample_id=sample_id, modules=json.loads(modules))
+            from .storage import load_bundle
+            parent = (settings.data_dir / "samples").resolve()
+            directory = (parent / payload.sample_id).resolve()
+            if not directory.is_relative_to(parent):
+                raise ValueError("Invalid sample")
+            result = load_bundle(directory)
+            image = decode_bytes(rgb.file.read(MAX_IMAGE_BYTES + 1))
+            if list(image.size) != result.image_size:
+                fail(400, "rgb_size_mismatch", "原始 RGB 必须与分割包同帧、同尺寸。")
+            options = SegmentOptions(frame_id=result.frame_id, prompt=result.prompt, depth=result.depth)
+            return workspace().submit(source="sample", options=options, modules=payload.modules,
+                request_id=request.state.request_id, sample_id=payload.sample_id, image=image)
+        except OverflowError:
+            fail(429, "queue_full", "任务队列已满，请稍后重试。", retry_after=5)
+        except (ValueError, OSError):
+            fail(400, "invalid_sample_job", "请检查分割包、原始 RGB 和模块选择。")
+        finally:
+            rgb.file.close()
+
     @api.get("/v1/jobs/{job_id}", response_model=JobInfo, tags=["任务"])
     def job(job_id: Identifier):
         return job_or_404(job_id)
@@ -178,6 +202,9 @@ def register_workspace_routes(api, settings):
             names.add("rgb.png")
         if result.depth_ref:
             names.add("depth.png")
+        if result.pipeline_result_ref:
+            from .pipeline_export import artifact_names
+            names |= artifact_names(engine.root / "results" / job_id)
         temp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
         path = Path(temp.name)
         temp.close()
@@ -213,7 +240,10 @@ def register_workspace_routes(api, settings):
                 segmentation = SegmentationResult.model_validate_json(metadata)
                 prefix = str(PurePosixPath(candidates[0]).parent)
                 prefix = "" if prefix == "." else prefix + "/"
-                names = {"segmentation.json", "overlay.jpg", "report.md"} | {i.mask_path for i in segmentation.instances}
+                # Extract only the selected bundle subtree, validating all paths. import_sample
+                # then keeps declared masks, metadata and original inputs; other files are discarded.
+                names = {entry.filename[len(prefix):] for entry in entries
+                         if entry.filename.startswith(prefix) and not entry.is_dir()}
                 if len({item.filename for item in entries}) != len(entries):
                     raise ValueError("Duplicate archive entries")
                 with tempfile.TemporaryDirectory(dir=engine.root) as directory:

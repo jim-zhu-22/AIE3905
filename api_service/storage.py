@@ -6,10 +6,47 @@ import re
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import shutil
 import tempfile
+import json
 
 from PIL import Image, ImageChops
 
 from .schemas import SegmentationResult
+
+
+def bundle_inputs(directory, result):
+    """Only declared, contained original inputs are eligible for downstream inference."""
+    paths = set()
+    rgb = result.rgb_path
+    if result.preprocess_ref:
+        preprocess = contained_file(directory, result.preprocess_ref)
+        data = json.loads(preprocess.read_text(encoding="utf-8"))
+        if data.get("frame_id") != result.frame_id or data.get("image_size") != result.image_size:
+            raise ValueError("Preprocess frame does not match segmentation")
+        rgb = rgb or data.get("rgb_path")
+        paths.add(result.preprocess_ref)
+    if rgb:
+        if rgb == "overlay.jpg":
+            raise ValueError("Overlay cannot be used as original RGB")
+        path = contained_file(directory, rgb)
+        with Image.open(path) as image:
+            if image.format not in {"PNG", "JPEG"} or list(image.size) != result.image_size:
+                raise ValueError("Original RGB dimensions/format do not match segmentation")
+            image.verify()
+        paths.add(rgb)
+    depth = result.depth.depth_path
+    if depth:
+        try:
+            path = contained_file(directory, depth)
+        except ValueError:
+            # Historical packages can contain an external, unresolved depth reference.
+            depth = None
+        else:
+            with Image.open(path) as image:
+                if image.format != "PNG" or image.mode not in {"I", "I;16", "I;16L", "I;16B"} or list(image.size) != result.image_size:
+                    raise ValueError("Invalid referenced depth")
+                image.verify()
+            paths.add(depth)
+    return rgb, depth, paths
 
 
 def contained_file(directory: Path, relative: str) -> Path:

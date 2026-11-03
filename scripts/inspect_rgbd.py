@@ -44,9 +44,16 @@ def inspect(source, output, template):
                 rgb = im.convert('RGB'); rgb.thumbnail((640, 480))
                 rgb.save(previews / f'{i:04d}_rgb.jpg', quality=86)
             with Image.open(depths[key]) as im:
-                im.load(); depth = np.array(im)
-            if depth.ndim != 2 or depth.dtype != np.uint16:
-                raise ValueError(f'Expected uint16 single-channel depth, got {depth.shape}/{depth.dtype}')
+                im.load(); depth = np.array(im); depth_mode = im.mode
+            # Pillow may expose a valid 16-bit PNG as int32 on Windows. Check
+            # the image mode and value range, then normalize the in-memory dtype.
+            if depth_mode not in {'I;16', 'I;16L', 'I;16B', 'I'}:
+                raise ValueError(f'Expected 16-bit single-channel depth, got mode {depth_mode}')
+            if depth.ndim != 2 or not np.issubdtype(depth.dtype, np.integer):
+                raise ValueError(f'Expected integer single-channel depth, got {depth.shape}/{depth.dtype}')
+            if depth.size and (int(depth.min()) < 0 or int(depth.max()) > 65535):
+                raise ValueError(f'Depth values outside uint16 range: {depth.min()}..{depth.max()}')
+            depth = depth.astype(np.uint16, copy=False)
             timestamp = datetime.strptime(Path(key).name, '%Y_%m_%d_%H_%M_%S_%f')
             gap = (timestamp - previous).total_seconds() if previous else 0.0
             if previous is None or gap > 60:

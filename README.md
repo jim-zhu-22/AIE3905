@@ -1,8 +1,18 @@
+在线服务启动后，在 `/` 使用连续图片工作台，在 `/demo` 使用材质识别演示。人工审核、训练数据准备和离线标注入口见 [annotation_studio](annotation_studio/README.md)。
+
+> 客户展示更新：在线页面从上传现场图片开始，真实执行“物体识别 → 特写 → 材质分析 → 汇总导出”，展示任务进度并支持结果回看。默认场景为包装分拣，可附深度图；模块接入由后台维护，前端提供演示设置。详见[客户演示说明](docs/demo_walkthrough_20261026.md)。
+
+> 最后输出为供机器人上层系统读取的 `pipeline-1.0` 视觉感知 JSON，包含物体编号、类别、像素框、轮廓路径和材质预测；不是机械臂控制指令，标定、抓取位姿与运动规划尚未实现。离线演示包仅回看已有成果，不能上传新图或运行模型。
+
+最新版本 **v0.5（2026-10-26）**：应用层与真实模型链路已合并，启动和验证见 [合并报告](docs/app_pipeline_merge_20261026.md)。下文较早的阶段记录保留作历史参考。
+
 # AIE3905 RGB-D 物体感知项目
+
+最新集成（2026-10-26）：v0.4 已接入团队 pipeline-1.0 分割包，支持直接读取 segmentation.json 继续材质链路；原生入口同步输出五阶段契约和 report.md。最终 result.json 为 pipeline-1.0，旧格式保留在 perception.json / segmentation_raw.json。深度默认仅引用与状态；材质 top-1 保留为候选，接触面和拒识未验收时正式状态为 partial。见 [合并报告](docs/segmentation_merge_20261026.md) 和 [运行说明](perception/README.md)。
 
 MirrorSpace × AIE3905 课程项目。目标是接收 RGB-D 图像及目标 Prompt，输出目标物体的实例 Mask、几何类别、材质与物理属性，并统一返回 JSON。
 
-**当前已实现数据检查、RGB-D 浏览与人工框选、RGB 材质分类训练和试跑。完整端到端 pipeline 尚未实现。**
+**当前已实现数据检查、RGB-D 浏览与人工框选、RGB 材质分类训练和试跑，并新增“实例分割预标注 → 材质预标注 → 人工审核 → 训练清单”链路。** 预标注不会直接作为训练真值。
 
 ## 从这里开始
 
@@ -87,6 +97,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_api.ps1
 | 浏览与人工标注 | scripts/rgbd_viewer.html | RGB/Depth 同帧查看、物体框和接触面框、JSON 草稿导出 |
 | 单帧产线测试 | scripts/probe_production_rgb.py | 人工框选区域分类、裁剪图、结果图及 JSON |
 | 六帧测试复现 | scripts/probe_production_batch.py | 固定6帧24个区域，输出原图副本、预测图片、CSV和JSON |
+| 自动生成训练候选 | scripts/build_training_dataset.py | SAM2.1-T 生成 bbox/mask，ResNet-18 生成材质候选，全部标为 needs_review |
+| 审核后导出训练集 | scripts/approve_training_dataset.py | 只将人工确认的对象导出为 training_manifest.csv |
 
 模型目前识别 paper、plastic、metal、wood、fabric 五类。Unknown 拒识尚未验证；fabric 不表示纯棉。Depth 当前用于检查和显示，未输入材质分类器。人工框不等于自动分割 Mask。
 
@@ -108,7 +120,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_api.ps1
 | 第5–6周 | 根据误差选择主要瓶颈，对模型或数据进行优化 | Improved Pipeline、Quantitative Results、Failure Analysis |
 | 第7–8周 | 整合、benchmark、端到端耗时与资源测量、文档和演示 | 完整 pipeline、标注流程、数据、评估脚本、JSON接口、最终Demo及技术文档 |
 
-当前处于 Milestone 1 的数据理解与材质基线探索阶段。几何类别、物理属性标签和完整标注协议仍需讨论。RTX 5060 8GB 级别运行和单场景约1秒是长期目标，本阶段主要完成测量分析，不强制达到部署指标；不要求完整三维重建、PLY或mesh输出。
+当前处于 Milestone 1 的数据理解与材质基线探索阶段。几何类别、物理属性标签和完整标注协议仍需讨论。自动化训练数据链路已经接入阶段性模型选型结果，但仍需用真实企业数据完成端到端运行和人工审核验收。RTX 5060 8GB 级别运行和单场景约1秒是长期目标，本阶段主要完成测量分析，不强制达到部署指标；不要求完整三维重建、PLY或mesh输出。
 
 ## 数据与文件
 
@@ -121,3 +133,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_api.ps1
 企业原始数据、标注和 output 结果仅保存在本地，不进入仓库。新生成的测试结果统一写入 output/。SAM 2.1 Tiny 交付权重随仓库的 Git LFS 指针管理；DINO 权重仍需按模型清单下载。仅凭克隆代码不能重现企业测试，仍需通过项目内部渠道取得相应数据，或按照操作文档自行训练。
 
 代码尚未声明开源许可证；公开数据和预训练权重分别遵循各自使用条款。
+
+
+## 模块化统一入口（2026-10-23）
+
+已完成三模型独立封装、单帧/批量运行与四张真实图片的 GPU 联调。目录、安装、命令和限制见 [模块说明](perception/README.md)，实测记录见 [验证报告](docs/modular_validation_20261023.md)。几何类别和物理属性仍待实现。上文阶段性状态保留为历史背景，以本节及验证报告为准。
+
+
+## 材质模型训练更新（2026-10-23）
+
+已完成三种训练方案的按帧交叉验证和候选模型训练，使用已确认的现场标签并加入公开样本回放。新候选的公开验证准确率为 76.00%，历史现场回归为 32/32；两者均非独立部署测试。新配置为 `configs/material_v2.local.json`，权重及数据范围见 [训练调优报告](docs/material_tuning_20261023.md)。F 盘现有自动标注候选仍待人工确认，优先复核清单包含 40 个实例。

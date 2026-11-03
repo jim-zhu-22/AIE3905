@@ -9,8 +9,11 @@ Set-Location -LiteralPath $projectDir
 if (-not $Python) {
     $localInterpreter = Join-Path $projectDir '.venv-api\Scripts\python.exe'
     if (Test-Path -LiteralPath $localInterpreter) { $Python = $localInterpreter }
+    elseif (Test-Path -LiteralPath (Join-Path $projectDir '.venv\Scripts\python.exe')) { $Python = Join-Path $projectDir '.venv\Scripts\python.exe' }
     else { $Python = 'python' }
 }
+$moduleConfig = Join-Path $projectDir 'api_service\modules.local.json'
+if (-not $env:AIE_MODULE_CONFIG -and (Test-Path -LiteralPath $moduleConfig)) { $env:AIE_MODULE_CONFIG = $moduleConfig }
 $env:PYTHONUTF8 = '1'
 $env:AIE_API_MODE = $Mode
 Write-Host "API mode: $Mode | http://127.0.0.1:$Port/"

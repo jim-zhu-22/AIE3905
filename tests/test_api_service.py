@@ -141,7 +141,7 @@ class ApiTests(unittest.TestCase):
         with TestClient(create_app(settings, model_factory=lambda _: SyntheticModel(empty=True))) as client:
             response = client.post("/v1/segment", json={"image_base64": encoded_image(), "prompt": "nothing."})
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json()["status"], "no_target")
+            self.assertEqual(response.json()["status"], "no_match")
             self.assertEqual(response.json()["instances"], [])
 
     def test_failed_model_initialization_reports_not_ready(self):

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>自动批注审核</title>
+<style>
+body{font:15px/1.5 system-ui,"Microsoft YaHei",sans-serif;max-width:1180px;margin:20px auto;padding:0 16px;background:#f5f7fa;color:#17202a}
+.bar,.card{background:#fff;border:1px solid #d9e0e7;border-radius:10px;padding:14px;margin-bottom:14px}.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button,select,textarea{font:inherit;padding:7px 10px;border:1px solid #aeb9c5;border-radius:6px;background:#fff}button{cursor:pointer}.primary{background:#1769aa;color:white;border-color:#1769aa}
+.grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:14px}.preview{background:#111;display:flex;align-items:center;justify-content:center;min-height:250px}.preview img{max-width:100%;max-height:440px;object-fit:contain}
+.meta{display:grid;grid-template-columns:130px 1fr;gap:8px;margin:12px 0}.scores{display:flex;gap:8px;flex-wrap:wrap}.score{padding:4px 8px;background:#edf2f7;border-radius:20px}.warn{color:#9a5b00}.ok{color:#176b44}@media(max-width:760px){.grid{grid-template-columns:1fr}}
+</style>
+<body>
+<h1>自动批注审核</h1>
+<p>模型结果只能作为候选。保存前请确认实例范围、材质、数据划分；只有 confirmed 才能进入训练集。</p>
+<div class="bar">
+ <button id="prev">上一条</button><button id="next">下一条</button>
+ <span id="counter"></span><span id="summary"></span><span id="status" class="warn"></span>
+ <button id="download" class="primary">下载审核结果</button>
+</div>
+<div id="empty" class="card" hidden>没有可审核的预标注。</div>
+<section id="main" hidden>
+ <div class="grid">
+  <div class="card"><h2>候选 ROI</h2><div class="preview"><img id="crop"></div><p id="id"></p></div>
+  <div class="card"><h2>实例 Mask</h2><div class="preview"><img id="mask"></div><p class="warn">如边界不准确，请使用 mask 修正工具后再确认。</p></div>
+ </div>
+ <div class="card">
+  <div class="meta"><strong>模型材质</strong><span id="modelLabel"></span><strong>置信度</strong><span id="confidence"></span><strong>分数</strong><div id="scores" class="scores"></div></div>
+  <hr>
+  <label>最终材质 <select id="material"><option value="">待确认</option><option>paper</option><option>plastic</option><option>metal</option><option>wood</option><option>fabric</option></select></label>
+  <label>状态 <select id="annotationStatus"><option value="needs_review">待复核</option><option value="confirmed">确认</option><option value="rejected">拒绝</option></select></label>
+  <label>数据划分 <select id="split"><option value="unassigned">未分配</option><option value="train">train</option><option value="validation">validation</option><option value="test">test</option></select></label>
+  <p><label>SKU <input id="sku"></label> <label>复核人 <input id="reviewer"></label></p>
+  <p><textarea id="notes" rows="3" style="width:100%" placeholder="记录覆膜、遮挡、反光、边界修改等原因"></textarea></p>
+  <button id="save" class="primary">保存当前结果</button>
+ </div>
+</section>
+<script>
+const $=id=>document.getElementById(id);let data=null,index=0,dirty=false;
+const priority={"重点复核":0,"常规复核":1,"quick_confirm":2};
+async function init(){try{const response=await fetch('preannotations.json',{cache:'no-store'});if(!response.ok)throw Error(`HTTP ${response.status}：当前目录没有 preannotations.json`);data=await response.json();data.objects.sort((a,b)=>(priority[a.review_priority]??9)-(priority[b.review_priority]??9));if(!data.objects.length){$('empty').hidden=false;return}$('main').hidden=false;render();}catch(e){$('status').textContent='当前页面不是候选数据目录。请先运行 build_training_dataset.py，再使用 serve_annotation_review.py --directory output/training_candidates。';$('empty').hidden=false;$('empty').textContent=String(e.message||e);console.error(e)}}
+function render(){const o=data.objects[index];$('counter').textContent=`${index+1} / ${data.objects.length}`;$('id').textContent=o.object_id;$('crop').src=o.crop_path;$('mask').src=o.mask_path;$('modelLabel').textContent=o.model_material;$('confidence').textContent=Number(o.material_confidence).toFixed(4)+` · ${o.review_priority}`;$('scores').replaceChildren(...Object.entries(o.material_scores||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>{const s=document.createElement('span');s.className='score';s.textContent=`${k}: ${Number(v).toFixed(3)}`;return s}));$('material').value=o.final_material||'';$('annotationStatus').value=o.annotation_status||'needs_review';$('split').value=o.split||'unassigned';$('sku').value=o.sku_id||'';$('reviewer').value=o.reviewer_id||'';$('notes').value=o.review_notes||'';updateSummary()}
+function updateSummary(){const c=data.objects.filter(o=>o.annotation_status==='confirmed').length,r=data.objects.filter(o=>o.annotation_status==='rejected').length;$('summary').textContent=`已确认 ${c} · 已拒绝 ${r} · 待处理 ${data.objects.length-c-r}`}
+function save(){const o=data.objects[index],status=$('annotationStatus').value,material=$('material').value,split=$('split').value;if(status==='confirmed'&&(!material||!['train','validation','test'].includes(split))){$('status').textContent='确认状态必须填写最终材质和 train/validation/test 划分。';return}o.final_material=material||null;o.annotation_status=status;o.split=split;o.sku_id=$('sku').value.trim();o.reviewer_id=$('reviewer').value.trim()||null;o.review_notes=$('notes').value.trim();dirty=true;$('status').textContent='已保存当前记录';updateSummary()}
+function download(){const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='reviewed_preannotations.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);dirty=false;$('status').textContent='已下载审核结果'}
+$('save').onclick=save;$('download').onclick=download;$('prev').onclick=()=>{save();if(index){index--;render()}};$('next').onclick=()=>{save();if(index<data.objects.length-1){index++;render()}};window.onbeforeunload=e=>{if(dirty){e.preventDefault();e.returnValue=''}};init();
+</script>
+</body>
+</html>

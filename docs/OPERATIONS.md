@@ -199,6 +199,39 @@ RGB为JPG；Depth要求16位单通道PNG，不能另存成8位图片。当前脚
 
 这两种格式都不是最终端到端接口。Instance Mask、geometry、hardness/deformability和目标Prompt相关字段尚未贯通，不能将当前文件当作已完成的最终交付。
 
+## 8A 自动生成训练候选并审核
+
+模型选型基线可以把 RGB-D 帧自动转换成训练候选数据。该流程保留原始图像不变：Grounding DINO + SAM 2.1 Tiny 生成实例框和 mask，ResNet-18 对候选 ROI 生成材质初标；输出中的每个对象都固定为 `needs_review`，不会直接进入训练。
+
+先准备 `inspect_rgbd.py` 生成的 `pairs.csv`，以及已训练并经过独立评估的材质 checkpoint：
+
+~~~powershell
+& $Python scripts/build_training_dataset.py `
+  --pairs output/rgbd_review/pairs.csv `
+  --material-checkpoint runs/week1_resnet18/best.pt `
+  --sam-weight week1_model_selection/sam2.1_t.pt `
+  --output output/training_candidates `
+  --device auto
+~~~
+
+输出包括 `preannotations.json`、`crops/`、`masks/` 和 `frames/`。人工审核时需要为每个对象填写 `final_material`、`annotation_status` 和数据 `split`。只有 `confirmed` 且 split 为 `train`、`validation` 或 `test` 的对象才能导出：
+
+在 `output/training_candidates` 目录启动一个本地静态服务，然后打开 `review.html`：
+
+~~~powershell
+py -3.11 scripts/serve_annotation_review.py --directory output/training_candidates --port 7863
+~~
+
+浏览器访问 `http://127.0.0.1:7863/review.html`。页面会优先展示低置信度和模型冲突样本；人工可以确认、修改、拒绝并保存 SKU、复核人、数据划分和备注。点击“下载审核结果”后，把下载的 `reviewed_preannotations.json` 放回 `output/training_candidates/`，再执行导出命令：
+
+~~~powershell
+& $Python scripts/approve_training_dataset.py `
+  --reviewed output/training_candidates/reviewed_preannotations.json `
+  --output output/training_candidates/training_manifest.csv
+~~~
+
+`approve_training_dataset.py` 会跳过 `needs_review` 和 `rejected`，也会拒绝没有人工最终材质、没有数据划分或缺少裁剪图的记录。导出的清单可交给 `material_recognition.validate_manifest` 和 `material_recognition.train`。若使用同一连续采集组，必须先按 SKU/序列填写并检查 split，不能让近重复帧跨训练、验证和测试集合。
+
 ## 9 检查与常见问题
 
 运行代码检查：

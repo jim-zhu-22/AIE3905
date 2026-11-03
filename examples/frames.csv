@@ -1,0 +1,2 @@
+frame_id,rgb_path,depth_path,prompt
+frame001,../data/local/frame001_color.jpg,,box . bag . bottle . carton . packet .

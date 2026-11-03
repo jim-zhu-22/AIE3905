@@ -37,3 +37,14 @@ Chad_frames_002-005_20261013/
 Chad_frames_002-005_dataset_20261013.zip
 AIE3905_Annotation_Kit/
 mobileclip_blt.ts
+
+# Model source is code, not a weight cache.
+!perception/models/
+!perception/models/**/
+!perception/models/**/*.py
+configs/*.local.json
+configs/*.local.csv
+Ultralytics/
+*.egg-info/
+build/
+dist/

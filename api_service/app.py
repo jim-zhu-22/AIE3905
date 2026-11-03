@@ -34,7 +34,7 @@ from .events import register_event_route
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("aie.api")
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 
 @dataclass
@@ -68,10 +68,9 @@ def default_model(settings):
         return model
     if not settings.sam_weight.is_file():
         raise FileNotFoundError("SAM 权重文件不存在。")
-    sys.path.insert(0, str(ROOT / "week1_model_selection"))
-    from segmentation_practice.pipeline import GroundedSegmenter
+    from perception.pipeline.segmentation import GroundedSegmenter
     model = GroundedSegmenter(sam_weight=str(settings.sam_weight), device=settings.device)
-    model.model_info["thresholds"] = {"box": model.box_threshold, "text": model.text_threshold,
+    model.model_info["thresholds"] = {"box": model.detection_backend.box_threshold, "text": model.detection_backend.text_threshold,
                                      "nms": model.nms_threshold}
     model.model_info["model_version"] = "seg_dino_tiny_sam21_v1"
     return model
@@ -112,7 +111,7 @@ def save_model_result(prediction, options, run_id, directory):
     depth = (options.depth or DepthMetadata()).model_copy(update={"depth_usable": False})
     warning_codes = ["depth_not_processed"] + (["empty_masks_discarded"] if dropped else [])
     return SegmentationResult(run_id=run_id, frame_id=options.frame_id,
-        status="ok" if instances else "no_target", prompt=options.prompt,
+        status="ok" if instances else "no_match", prompt=options.prompt,
         image_size=[width, height], model_version=prediction.model_info.get("model_version", "seg_dino_tiny_sam21_v1"),
         instance_count=len(instances), instances=instances, depth=depth, warnings=warning_codes,
         model_info=prediction.model_info, mode=options.mode, stage_latency_ms=prediction.latency_ms,
@@ -188,6 +187,10 @@ def create_app(settings=None, *, model_factory=default_model, registry=None):
         parent = settings.data_dir / "samples"
         return [p for p in sorted(parent.glob("*")) if re.fullmatch(r"[A-Za-z0-9_-]{1,100}", p.name)
                 and p.resolve().is_relative_to(parent.resolve()) and (p / "segmentation.json").is_file()]
+
+    @api.get("/demo", response_class=HTMLResponse, include_in_schema=False)
+    def customer_demo():
+        return Path(__file__).with_name("demo.html").read_text(encoding="utf-8")
 
     @api.get("/", response_class=HTMLResponse, include_in_schema=False)
     def home():

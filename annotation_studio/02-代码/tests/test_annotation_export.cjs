@@ -1,0 +1,13 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const zlib=require('node:zlib');
+const {exportMaskPng,exportZip,exportCoco}=require('../scripts/annotation_export.js');
+const {encodeMask}=require('../scripts/annotation_masks.js');
+const frames=[{id:'f1',width:3,height:2},{id:'f2',width:3,height:2}];
+const row=(id,frame)=>({object_id:id,frame_id:frame,mask_rle:encodeMask(Uint8Array.from([1,0,0,1,1,0]),3,2),object_bbox_xyxy:[0,0,2,2],mask_review_status:'confirmed',mask_reviewed_by:'synthetic_test',mask_reviewed_at:'2026-10-13T00:00:00Z',material:'paper'});
+const review=id=>({frame_id:id,complete:true,reviewed_by:'synthetic_test',reviewed_at:'2026-10-13T00:00:00Z'});
+test('grayscale PNG preserves every pixel and shape',async()=>{const b=Buffer.from(await (await exportMaskPng([1,0,0,1,1,0],3,2)).arrayBuffer());assert.equal(b.readUInt32BE(16),3);assert.equal(b.readUInt32BE(20),2);assert.equal(b[25],0);let p=8,compressed=[];while(p<b.length){const n=b.readUInt32BE(p),type=b.subarray(p+4,p+8).toString();if(type==='IDAT')compressed.push(b.subarray(p+8,p+8+n));p+=12+n;}assert.deepEqual([...zlib.inflateSync(Buffer.concat(compressed))],[0,255,0,0,0,255,255,0]);});
+test('ZIP rejects traversal and duplicate filenames',async()=>{await assert.rejects(exportZip([{path:'../bad',data:'x'}]));await assert.rejects(exportZip([{path:'same',data:'x'},{path:'same',data:'y'}]));});
+test('COCO excludes entire incomplete or partly unreviewed frames',()=>{const a=row('a','f1'),b=row('b','f1'),c=row('c','f2');b.mask_review_status='needs_review';const result=exportCoco([a,b,c],frames,[review('f1'),review('f2')]);assert.deepEqual(result.coco.images.map(x=>x.frame_id),['f2']);assert.equal(result.coco.annotations.length,1);assert.equal(result.excluded.length,1);assert.equal(exportCoco([a],frames,[]).coco.images.length,0);});
+test('COCO uses column-major RLE, xywh box and one object class',()=>{const a=row('a','f1');const {coco}=exportCoco([a],frames,[review('f1')]);assert.deepEqual(coco.annotations[0].segmentation.counts,[0,2,1,1,2]);assert.deepEqual(coco.annotations[0].bbox,[0,0,2,2]);assert.equal(coco.annotations[0].area,3);assert.equal(coco.annotations[0].category_id,1);});
+test('file-format JSON roundtrip retains mask and label',()=>{const a=row('object_0001','f1');const {coco}=exportCoco([a],frames,[review('f1')]);assert.equal(JSON.parse(JSON.stringify(coco)).annotations[0].material,'paper');});

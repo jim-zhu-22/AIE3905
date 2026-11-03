@@ -1,0 +1,9 @@
+{
+  "sam_weight": "../week1_model_selection/sam2.1_t.pt",
+  "material_weight": "../weights/resnet18/best.pt",
+  "device": "cpu",
+  "crop_mode": "bbox",
+  "mode": "full",
+  "aligned_depth": false,
+  "depth_processing": "reference"
+}

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import shutil
 
-from .storage import contained_file, load_bundle, staged_bundle
+from .storage import contained_file, load_bundle, staged_bundle, bundle_inputs
 
 
 def import_sample(source: Path, data_dir: Path, sample_id: str = "frame_211"):
@@ -15,6 +15,7 @@ def import_sample(source: Path, data_dir: Path, sample_id: str = "frame_211"):
     result = load_bundle(source, check_pixels=True)
     destination = data_dir / "samples" / sample_id
     paths = {"segmentation.json", "report.md", "overlay.jpg"} | {i.mask_path for i in result.instances}
+    paths |= bundle_inputs(source, result)[2]
     with staged_bundle(data_dir / "samples", sample_id) as stage:
         for relative in paths:
             target = stage / relative

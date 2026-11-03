@@ -1,0 +1,10 @@
+# Only dependencies used by this demo; no training/web-framework stack.
+numpy>=1.26,<3
+Pillow>=10,<13
+torch==2.9.1
+torchvision==0.24.1
+transformers==5.17.0
+ultralytics==8.4.183
+scipy>=1.11,<2
+safetensors>=0.8,<1
+huggingface-hub>=1.5,<2

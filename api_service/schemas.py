@@ -24,6 +24,8 @@ class DepthMetadata(BaseModel):
     alignment: str = Field(default="unconfirmed", min_length=1, max_length=80)
     intrinsics: dict[str, Annotated[float, Field(allow_inf_nan=False)]] | None = None
     depth_usable: bool = False
+    processing_status: Literal["reference_only", "legacy_statistics_only"] = "reference_only"
+    source_depth_path: str | None = None
 
 
 class SegmentOptions(BaseModel):
@@ -56,6 +58,8 @@ class ExecutionInfo(BaseModel):
     request_id: str | None = None
     api_elapsed_ms: Duration | None = None
     timing_scope: str | None = None
+    new_attribute_inference: bool = False
+    rgb_binding: str | None = None
 
 
 class SegmentationResult(BaseModel):
@@ -65,7 +69,7 @@ class SegmentationResult(BaseModel):
     run_id: Identifier
     frame_id: Identifier
     stage: Literal["segmentation"] = "segmentation"
-    status: Literal["ok", "no_target"]
+    status: Literal["ok", "no_match"]
     prompt: str = Field(min_length=1, max_length=300)
     image_size: list[Pixel] = Field(min_length=2, max_length=2)
     model_version: str = Field(min_length=1, max_length=200)
@@ -80,12 +84,21 @@ class SegmentationResult(BaseModel):
     overlay_ref: str | None = None
     report_ref: str | None = None
     segmentation_ref: str | None = None
+    rgb_path: str | None = None
+    preprocess_ref: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_empty_status(cls, value):
+        if isinstance(value, dict) and value.get("status") == "no_target":
+            value = {**value, "status": "no_match"}
+        return value
 
     @model_validator(mode="after")
     def consistent_instances(self):
         if self.instance_count != len(self.instances):
             raise ValueError("instance_count does not match instances")
-        if (self.status == "no_target") != (self.instance_count == 0):
+        if (self.status == "no_match") != (self.instance_count == 0):
             raise ValueError("status does not match instance_count")
         if len({item.instance_id for item in self.instances}) != self.instance_count:
             raise ValueError("Duplicate instance_id")

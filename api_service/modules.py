@@ -111,15 +111,21 @@ class MaterialAdapter:
         if not checkpoint.is_file():
             raise FileNotFoundError("材质权重未配置或不存在")
         from material_recognition.infer import Predictor
-        self.predictor = Predictor(checkpoint)
+        device = spec.options.get("device")
+        self.predictor = Predictor(checkpoint, device=device) if device else Predictor(checkpoint)
+        import hashlib
+        self.checkpoint_sha256 = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
 
     def analyze(self, context):
         # Existing classifier was trained on RGB crops; do not silently change preprocessing.
         with Image.open(context.rgb_path) as image:
             raw = self.predictor.predict(image.convert("RGB").crop(context.bbox_xyxy))
-        return {"status": "ok", "label": raw["label"], "score": raw["score"],
+        return {"status": "unknown", "label": "unknown", "score": raw["score"],
+                "reason": "decision_policy_not_validated",
                 "model_version": raw.get("model_version"), "source": "material_recognition.Predictor",
-                "values": {"region": "object_bbox", "scores": raw.get("scores", {})}}
+                "values": {"region": "object_bbox", "scores": raw.get("scores", {}),
+                           "top1_label": raw["label"], "contact_verified": False,
+                           "checkpoint_sha256": self.checkpoint_sha256}}
 
 
 class CommandAdapter:

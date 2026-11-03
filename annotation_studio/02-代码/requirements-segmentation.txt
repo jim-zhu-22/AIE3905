@@ -1,0 +1,8 @@
+# Install with the existing CUDA-enabled torch/torchvision environment.
+transformers==5.17.0
+huggingface-hub>=1.5,<2
+safetensors>=0.8,<1
+Pillow>=10,<13
+numpy>=1.26,<3
+scipy>=1.11,<2
+ultralytics==8.4.183

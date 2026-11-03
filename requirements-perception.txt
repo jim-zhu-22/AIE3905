@@ -1,0 +1,8 @@
+# Install the CPU or CUDA torch build separately; tested with Python 3.12.12.
+numpy==2.2.6
+Pillow==11.3.0
+transformers==4.57.1
+ultralytics==8.3.221
+huggingface-hub==0.36.2
+# Optional existing material demo; keeps its Hub requirement compatible.
+gradio==5.49.1

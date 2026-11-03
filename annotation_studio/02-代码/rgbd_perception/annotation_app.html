@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>本地自动标注 · 批量与审核</title>
+<style>
+:root{font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:#163044;background:#eef3f6;font-size:14px}
+*{box-sizing:border-box}body{margin:0}header{background:#102b3c;color:white;padding:20px 28px;display:flex;align-items:center;justify-content:space-between;gap:18px}h1{font-size:23px;margin:0 0 6px}p{margin:6px 0;line-height:1.6}
+button,.button,select,input{font:inherit;border:1px solid #bfccd3;border-radius:6px;padding:8px 12px;background:white;color:#163044}button,.button{cursor:pointer;display:inline-block;text-decoration:none}button:hover,.button:hover{background:#e4f4f2}button:disabled{opacity:.45;cursor:wait}.primary{background:#087f78;color:white;border-color:#087f78}.primary:hover{background:#06675f}.danger{color:#b62439}
+.status{padding:16px 28px;background:white;border-bottom:1px solid #d3e0e5}.progress{height:9px;background:#dce8ec;border-radius:12px;overflow:hidden;margin:9px 0}.progress div{height:100%;width:0;background:#079c8c;transition:width .3s}.muted{color:#597181;font-size:12px}.paths{overflow-wrap:anywhere}.layout{display:grid;grid-template-columns:240px minmax(400px,1fr) 285px;gap:16px;padding:18px;align-items:start}.panel{border:1px solid #d4e0e5;background:white;border-radius:10px;overflow:hidden}.panelhead{padding:14px;border-bottom:1px solid #e1e9ed;font-weight:600}.files{max-height:68vh;overflow:auto}.file{display:block;text-align:left;width:100%;border:0;border-radius:0;padding:11px 14px;border-bottom:1px solid #edf1f4}.file.active{background:#daf1ee;border-left:4px solid #078b7f}.file span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tag{font-size:12px;color:#617b87;margin-top:4px}.toolbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:12px}.toolbar button.active{background:#163f52;color:white}.canvaswrap{padding:10px;background:#dbe4e9;overflow:auto;min-height:300px;display:flex;align-items:flex-start;justify-content:center}canvas{display:block;width:100%;height:auto;background:#bfcfd9;touch-action:none;max-width:100%}.objects{max-height:36vh;overflow:auto}.object{display:block;width:100%;text-align:left;border:0;border-radius:0;border-bottom:1px solid #e7eef2;padding:12px}.object.active{background:#e1f6ed;border-left:4px solid #087f78}.field{padding:14px}.field label{display:block;margin:10px 0 6px}.field select,.field input[type=text]{width:100%}.notice{padding:11px 16px;line-height:1.6;background:#fff7df;white-space:pre-wrap;overflow-wrap:anywhere}.error{color:#a8182e}.bottom{padding:12px 16px;border-top:1px solid #dce7ec}.empty{padding:22px;color:#617787}.flex{display:flex;gap:8px;flex-wrap:wrap}details{padding:10px 28px;background:#f8fbfc}summary{cursor:pointer}#message{min-height:42px}#selection{overflow-wrap:anywhere}input[type=range]{padding:0;width:100px}@media(max-width:1150px){.layout{grid-template-columns:190px 1fr}.review{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr}.review .panelhead{grid-column:1/-1}}@media(max-width:700px){header{display:block}.layout{display:block}.panel{margin-bottom:12px}.files{max-height:180px}.review{display:block}}
+</style>
+</head>
+<body>
+<header><div><h1>本地自动标注工作台</h1><div>图片入队 → 自动分割与材质建议 → 人工修订 → 导出 mask</div></div>
+<div class="flex"><label class="button" for="upload">＋ 上传图片（支持多张）</label><input id="upload" type="file" multiple accept="image/png,image/jpeg,image/webp,image/bmp" hidden><button id="export">导出全部已确认 mask</button></div></header>
+<section class="status"><div class="flex"><strong id="progressText">连接本地服务…</strong><span id="phase"></span><button id="pause">暂停批量</button></div><div class="progress"><div id="bar"></div></div>
+<div id="paths" class="muted paths"></div><div id="serviceError" class="error"></div></section>
+<details><summary>使用方法与数据说明</summary><p>把 RGB 图片放入“输入文件夹”或点击上传，服务每 5 秒自动发现新图片。原始 RGBD 数据中的 <code>_depth</code> 图不参与本轮分割。相同文件内容只处理一次，模型候选与人工修订分开保存。</p>
+<p>点击左侧已完成图片查看候选，点击右侧对象可修改材质。漏检时选择“框选补充”，拖框后由 SAM2 生成真实 mask；轮廓不准用“补画 / 擦除”修订。填写审核人，保存草稿或确认整图。材质分数只是模型建议，不代表真实准确率。空候选也需要人工检查。</p>
+<p>导出 ZIP 仅包含已确认图片的逐实例、原图尺寸二值 PNG mask（0 背景 / 255 前景）与图片映射 manifest，不包含材质标签。材质、审核记录保存在本地工作区。已完成图片不因重启或更换权重而自动重跑。旧演示网页与历史草稿保持不变。</p></details>
+<main class="layout">
+<aside class="panel"><div class="panelhead">图片队列 <span id="total"></span></div><div class="toolbar"><select id="filter"><option value="all">全部图片</option><option value="done">自动完成</option><option value="pending">待处理</option><option value="failed">失败</option><option value="reviewed">已审核</option><option value="unreviewed">待审核</option></select></div><div class="files" id="files"></div></aside>
+<section class="panel"><div class="panelhead" id="selection">选择图片查看结果</div>
+<div class="toolbar" id="tools"><button data-mode="select" class="active">选择对象</button><button data-mode="box">框选补充</button><button data-mode="paint">补画 mask</button><button data-mode="erase">擦除 mask</button><label>半径 <input id="radius" type="range" min="2" max="60" value="12"><span id="radiusText">12</span> px</label><button id="undo">撤销</button><label><input type="checkbox" id="overlay" checked>显示 mask</label></div>
+<div class="canvaswrap"><canvas id="canvas" width="640" height="420"></canvas></div>
+<div class="notice" id="message">上传图片或等待文件夹扫描；完成后在左侧选择图片。</div>
+<div class="bottom flex"><button id="prev">上一张</button><button id="next">下一张</button><button id="retry" hidden>重试失败图片</button><span id="dirty" class="muted"></span></div></section>
+<aside class="panel review"><div class="panelhead">实例与材质 · <span id="objectCount">0</span></div><div id="objects" class="objects"></div>
+<div class="field"><strong id="objectTitle">尚未选择对象</strong><p id="prediction" class="muted">自动材质仅供参考，请人工确认。</p><label for="material">修订材质</label><select id="material" disabled><option value="paper">纸 / paper</option><option value="plastic">塑料 / plastic</option><option value="metal">金属 / metal</option><option value="wood">木 / wood</option><option value="fabric">织物 / fabric</option><option value="unknown">不确定 / unknown</option></select>
+<div class="toolbar"><button id="delete" class="danger">删除误检对象</button></div>
+<label for="reviewer">审核人</label><input id="reviewer" type="text" placeholder="姓名或组内昵称" maxlength="100">
+<p class="muted">修改已确认结果后，需要重新保存并确认。修改中不会被后台候选覆盖。</p>
+<div class="flex"><button id="save">保存草稿</button><button id="confirm" class="primary">确认本图审核</button><button id="exportOne">导出本图 mask</button></div></div></aside>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id), canvas=$('canvas'), ctx=canvas.getContext('2d');
+const materials={paper:'纸',plastic:'塑料',metal:'金属',wood:'木',fabric:'织物',unknown:'不确定'};
+const states={pending:'排队中',processing:'正在自动标注',done:'自动完成 · 待审核',failed:'失败'};
+let statusData=null, currentId=null, doc=null, objects=[], selected=-1, img=null, dirty=false, busy=false, mode='select', dragging=null, lastPoint=null, history=[], listSignature='', pollBusy=false;
+const layer=document.createElement('canvas'), lc=layer.getContext('2d');
+const colors=[[12,215,171],[255,188,58],[66,163,255],[244,112,191],[171,132,250]];
+function note(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error)}
+async function api(url,data){
+  const response=await fetch(url,data===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Annotation-Client':'local'},body:JSON.stringify(data)});
+  const result=await response.json();if(!response.ok)throw Error(result.error||'请求失败');return result;
+}
+function decode(rle){const pixels=new Uint8Array(rle.size[0]*rle.size[1]);let pos=0;rle.counts.forEach((n,i)=>{if(i%2)pixels.fill(1,pos,pos+n);pos+=n});return pixels}
+function encode(pixels){let bit=0,n=0,counts=[];for(const p of pixels){if(p===bit)n++;else{counts.push(n);n=1;bit=p}}counts.push(n);return {size:[canvas.height,canvas.width],counts,order:'C'}}
+function pack(){return objects.map(o=>{const {_pixels,...rest}=o;return {...rest,mask:encode(_pixels)}})}
+function unpack(rows){return rows.map(o=>({...o,_pixels:decode(o.mask)}))}
+function draftKey(){return 'aie3905-batch-review-'+currentId}
+function changed(){
+  dirty=true;$('dirty').textContent='有未保存修订（浏览器临时备份）';
+  try{localStorage.setItem(draftKey(),JSON.stringify({revision:doc.revision,objects:pack(),reviewer:$('reviewer').value}))}
+  catch(e){$('dirty').textContent='有未保存修订；浏览器备份空间不足，请保存草稿'}
+}
+function checkpoint(){history.push(pack());if(history.length>12)history.shift()}
+function editable(){return doc&&doc.state==='done'&&!busy}
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);if(!img)return;ctx.drawImage(img,0,0);
+  if($('overlay').checked){
+    const im=lc.createImageData(canvas.width,canvas.height);
+    objects.forEach((o,i)=>{const c=colors[i%colors.length],alpha=i===selected?155:80;for(let p=0;p<o._pixels.length;p++)if(o._pixels[p]){const k=p*4;im.data[k]=c[0];im.data[k+1]=c[1];im.data[k+2]=c[2];im.data[k+3]=alpha}});
+    lc.putImageData(im,0,0);ctx.drawImage(layer,0,0);
+  }
+  objects.forEach((o,i)=>{if(!o.bbox)return;const [x,y,x2,y2]=o.bbox;ctx.strokeStyle=i===selected?'#fff':'#ffe36e';ctx.lineWidth=i===selected?4:2;ctx.strokeRect(x,y,x2-x,y2-y);ctx.font='bold 18px sans-serif';ctx.fillStyle='#102b3c';ctx.fillRect(x,y,28,25);ctx.fillStyle='white';ctx.fillText(String(i+1),x+5,y+19)});
+  if(dragging&&mode==='box'){ctx.strokeStyle='#ff5151';ctx.lineWidth=3;ctx.strokeRect(dragging[0],dragging[1],lastPoint[0]-dragging[0],lastPoint[1]-dragging[1])}
+}
+function renderObjects(){
+  $('objects').replaceChildren();$('objectCount').textContent=objects.length;
+  objects.forEach((o,i)=>{const b=document.createElement('button');b.className='object'+(selected===i?' active':'');b.textContent=`${i+1}. ${o.label||'手工对象'} · ${materials[o.material]||o.material}`;b.onclick=()=>{if(busy)return;selected=i;renderObjects();draw()};$('objects').append(b)});
+  const o=objects[selected];$('material').disabled=!o||busy;
+  $('objectTitle').textContent=o?`实例 ${selected+1}`:'尚未选择对象';
+  $('prediction').textContent=o?`模型建议：${materials[o.model_material]||o.model_material||'未知'}${Number.isFinite(o.model_confidence)?' · 分数 '+(o.model_confidence*100).toFixed(1)+'%':''}（不是准确率）`:'点击实例后修改材质；漏检可框选补充。';
+  if(o)$('material').value=o.material||'unknown';
+}
+function renderFiles(){
+  if(!statusData)return;
+  const filter=$('filter').value,signature=JSON.stringify([filter,currentId,statusData.items.map(r=>[r.id,r.state,r.reviewed])]);
+  if(signature===listSignature)return;listSignature=signature;
+  const scroll=$('files').scrollTop;$('files').replaceChildren();
+  statusData.items.forEach((row,i)=>{
+    if(filter!=='all'&&(filter==='reviewed'?!row.reviewed:filter==='unreviewed'?(row.state!=='done'||row.reviewed):row.state!==filter))return;
+    const b=document.createElement('button');b.className='file'+(row.id===currentId?' active':'');const name=document.createElement('span');name.textContent=`${i+1}. ${row.name}`;name.title=row.name;
+    const tag=document.createElement('span');tag.className='tag';tag.textContent=row.reviewed?'✓ 已人工确认':states[row.state];b.append(name,tag);b.onclick=()=>openItem(row.id);$('files').append(b);
+  });$('files').scrollTop=scroll;
+}
+async function openItem(id,automatic=false){
+  if(busy)return;
+  if(dirty&&!automatic&&!confirm('当前有未保存修订。切换将保留浏览器临时备份，但不会保存到服务端。仍要切换吗？'))return;
+  currentId=id;doc=null;img=null;objects=[];selected=-1;history=[];dirty=false;renderFiles();draw();renderObjects();
+  try{
+    const next=await api('/api/item/'+id);if(currentId!==id)return;doc=next;
+    canvas.width=doc.width;canvas.height=doc.height;layer.width=doc.width;layer.height=doc.height;
+    objects=unpack(doc.review?.objects??doc.prediction?.objects??[]);
+    $('selection').textContent=doc.name+` · ${doc.width}×${doc.height}`;
+    $('dirty').textContent=doc.review?(doc.review.confirmed?'已确认审核':'已保存草稿'):'尚未人工审核';
+    $('retry').hidden=doc.state!=='failed';
+    if(doc.review?.reviewer)$('reviewer').value=doc.review.reviewer;
+    try{const saved=JSON.parse(localStorage.getItem(draftKey()));if(saved&&saved.revision===doc.revision){objects=unpack(saved.objects);$('reviewer').value=saved.reviewer;dirty=true;$('dirty').textContent='已恢复未保存修订'}}catch(e){}
+    selected=objects.length?0:-1;renderObjects();
+    const loaded=new Image();loaded.onload=()=>{if(currentId===id){img=loaded;draw()}};loaded.src='/api/image/'+id;
+    note(doc.state==='done'?(objects.length?'已加载 mask 与材质建议。请选择实例检查、修边或框选补充。':'自动检测完成，但没有找到候选。请人工检查，可使用“框选补充”生成 mask。'):doc.state==='failed'?'自动批注失败：'+doc.error:'本图已入队，完成后自动显示候选。',doc.state==='failed');
+  }catch(e){note(e.message,true)}
+}
+async function poll(){
+  if(pollBusy)return;pollBusy=true;
+  try{
+    statusData=await api('/api/status');const c=statusData.counts,finished=(c.done||0)+(c.failed||0);
+    $('progressText').textContent=`共 ${statusData.total} 张 · 完成 ${c.done||0} · 排队 ${c.pending||0} · 处理中 ${c.processing||0} · 失败 ${c.failed||0} · 已审核 ${statusData.items.filter(r=>r.reviewed).length}`;
+    $('bar').style.width=(statusData.total?100*finished/statusData.total:0)+'%';
+    $('phase').textContent=statusData.phase+(statusData.current?'：'+statusData.current:'');
+    $('paths').textContent='输入文件夹：'+statusData.inbox+'　｜　输出工作区：'+statusData.output;
+    $('serviceError').textContent=[statusData.model_error,...Object.entries(statusData.scan_errors).map(([p,e])=>p+': '+e)].filter(Boolean).join('；');
+    $('pause').textContent=statusData.paused?'继续批量':'暂停批量';$('total').textContent=statusData.total;
+    renderFiles();
+    if(!currentId&&statusData.items.length)await openItem((statusData.items.find(r=>r.state==='done')||statusData.items[0]).id,true);
+    else if(doc&&!dirty&&!busy&&statusData.items.find(r=>r.id===currentId)?.state!==doc.state)await openItem(currentId,true);
+  }catch(e){$('serviceError').textContent='连接断开：请保持启动脚本窗口运行。'+e.message}finally{pollBusy=false}
+}
+function coords(e){const r=canvas.getBoundingClientRect();return [Math.max(0,Math.min(canvas.width-1,Math.round((e.clientX-r.left)*canvas.width/r.width))),Math.max(0,Math.min(canvas.height-1,Math.round((e.clientY-r.top)*canvas.height/r.height)))]}
+function stamp(p){
+  const o=objects[selected];if(!o)return;
+  const radius=+$('radius').value,[cx,cy]=p;
+  for(let y=Math.max(0,cy-radius);y<=Math.min(canvas.height-1,cy+radius);y++)
+    for(let x=Math.max(0,cx-radius);x<=Math.min(canvas.width-1,cx+radius);x++)
+      if((x-cx)**2+(y-cy)**2<=radius**2)o._pixels[y*canvas.width+x]=mode==='paint'?1:0;
+}
+function updateBounds(o){
+  let x1=canvas.width,y1=canvas.height,x2=0,y2=0;
+  for(let p=0;p<o._pixels.length;p++)if(o._pixels[p]){const x=p%canvas.width,y=Math.floor(p/canvas.width);x1=Math.min(x1,x);y1=Math.min(y1,y);x2=Math.max(x2,x+1);y2=Math.max(y2,y+1)}
+  o.bbox=x2?[x1,y1,x2,y2]:null;
+}
+canvas.onpointerdown=e=>{
+  if(!editable()||!img)return;
+  const p=coords(e);
+  if(mode==='select'){const hit=objects.findIndex(o=>o._pixels[p[1]*canvas.width+p[0]]);if(hit>=0){selected=hit;renderObjects();draw()}return}
+  if(mode!=='box'&&selected<0){note('先选择一个对象，再用画笔修改。');return}
+  dragging=p;lastPoint=p;canvas.setPointerCapture(e.pointerId);
+  if(mode!=='box'){checkpoint();stamp(p);draw()}
+};
+canvas.onpointermove=e=>{
+  if(!dragging)return;
+  const p=coords(e);
+  if(mode!=='box'){const steps=Math.max(1,Math.ceil(Math.hypot(p[0]-lastPoint[0],p[1]-lastPoint[1])/Math.max(1,+$('radius').value/2)));for(let s=1;s<=steps;s++)stamp([Math.round(lastPoint[0]+(p[0]-lastPoint[0])*s/steps),Math.round(lastPoint[1]+(p[1]-lastPoint[1])*s/steps)])}
+  lastPoint=p;draw();
+};
+canvas.onpointerup=async e=>{
+  if(!dragging)return;
+  const start=dragging,end=coords(e);dragging=null;
+  if(mode==='box'){
+    const box=[Math.min(start[0],end[0]),Math.min(start[1],end[1]),Math.max(start[0],end[0])+1,Math.max(start[1],end[1])+1];
+    if(box[2]-box[0]<4||box[3]-box[1]<4){draw();return}
+    busy=true;note('正在用 SAM2 将手工框转换为 mask，并预测材质…');renderObjects();
+    try{const result=await api('/api/box/'+currentId,{box});if(result.objects.length){checkpoint();objects.push(...unpack(result.objects));selected=objects.length-1;changed();note('已生成真实 mask 与材质建议，请修订并确认。')}else note('框内未产生非空 mask，请重新框选。')}
+    catch(e){note(e.message,true)}finally{busy=false;renderObjects();draw()}
+  }else{updateBounds(objects[selected]);changed();draw()}
+};
+canvas.onpointercancel=()=>{if(dragging&&mode!=='box'){updateBounds(objects[selected]);changed()}dragging=null;draw()};
+$('tools').querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{if(busy)return;mode=b.dataset.mode;$('tools').querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));note(mode==='box'?'在图片上拖出矩形框，松开后生成 mask。':mode==='select'?'点击右侧实例或图片中的 mask 选中对象。':'在已选实例上拖动画笔，修改的是 mask 像素。')});
+$('material').onchange=()=>{if(editable()&&objects[selected]){checkpoint();objects[selected].material=$('material').value;changed();renderObjects()}};
+$('delete').onclick=()=>{if(editable()&&objects[selected]){checkpoint();objects.splice(selected,1);selected=objects.length?Math.min(selected,objects.length-1):-1;changed();renderObjects();draw()}};
+$('undo').onclick=()=>{if(editable()&&history.length){objects=unpack(history.pop());selected=objects.length?Math.min(Math.max(selected,0),objects.length-1):-1;changed();renderObjects();draw()}};
+$('radius').oninput=()=>{$('radiusText').textContent=$('radius').value};$('overlay').onchange=draw;
+async function save(confirmed){
+  if(!editable())return;
+  if(confirmed&&!$('reviewer').value.trim()){note('请先填写审核人。',true);return}
+  if(confirmed&&!confirm(objects.length?'确认已检查所有实例的 mask 和材质？':'本图没有任何对象，确认已人工检查且没有需要标注的对象？'))return;
+  busy=true;
+  try{
+    const review=await api('/api/review/'+currentId,{revision:doc.revision,objects:pack(),reviewer:$('reviewer').value,confirmed});
+    doc.review=review;doc.revision=review.revision;dirty=false;localStorage.removeItem(draftKey());localStorage.setItem('aie3905-reviewer',$('reviewer').value);
+    $('dirty').textContent=confirmed?'已确认审核':'已保存草稿';note(confirmed?'本图已确认，可以导出 mask。':'人工修订已保存到本地工作区，重启后仍可继续。');await poll();
+  }catch(e){note(e.message,true)}finally{busy=false}
+}
+$('save').onclick=()=>save(false);$('confirm').onclick=()=>save(true);
+$('reviewer').value=localStorage.getItem('aie3905-reviewer')||'';
+$('reviewer').onchange=()=>{if(editable())changed()};
+async function download(one){
+  if(dirty){note('请先保存并确认当前修订，避免导出旧版本。',true);return}
+  try{
+    const response=await fetch('/api/export'+(one?'?id='+currentId:''));
+    if(!response.ok)throw Error((await response.json()).error);
+    const url=URL.createObjectURL(await response.blob()),a=document.createElement('a');a.href=url;a.download='reviewed_masks.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    note('已导出已确认的逐实例 PNG mask；材质记录仍保留在本地工作区。');
+  }catch(e){note(e.message,true)}
+}
+$('export').onclick=()=>download(false);$('exportOne').onclick=()=>{if(currentId)download(true)};
+$('upload').onchange=async e=>{
+  const files=Array.from(e.target.files);let added=0,duplicates=0,errors=[];
+  for(let i=0;i<files.length;i++){
+    const file=files[i];note(`上传 ${i+1}/${files.length}：${file.name}`);
+    try{if(file.size>32*1024*1024)throw Error('超过 32 MB');const response=await fetch('/api/upload?name='+encodeURIComponent(file.name),{method:'POST',headers:{'X-Annotation-Client':'local'},body:file});const result=await response.json();if(!response.ok)throw Error(result.error);if(result.added)added++;else duplicates++}
+    catch(err){errors.push(file.name+': '+err.message)}
+  }
+  e.target.value='';note(`上传结束：新增 ${added} 张，重复跳过 ${duplicates} 张。${errors.length?'\n'+errors.join('\n'):''}`,!!errors.length);await poll();
+};
+$('pause').onclick=async()=>{try{await api('/api/pause',{paused:!statusData.paused});await poll()}catch(e){note(e.message,true)}};
+$('retry').onclick=async()=>{try{await api('/api/retry',{id:currentId});await poll()}catch(e){note(e.message,true)}};
+$('filter').onchange=renderFiles;
+function adjacent(delta){if(!statusData)return;const i=statusData.items.findIndex(r=>r.id===currentId),row=statusData.items[i+delta];if(row)openItem(row.id)}
+$('prev').onclick=()=>adjacent(-1);$('next').onclick=()=>adjacent(1);
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
+poll();setInterval(poll,2000);
+</script>
+</body></html>

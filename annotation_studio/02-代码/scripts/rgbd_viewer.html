@@ -1,0 +1,118 @@
+<!doctype html><html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>商品包装标注</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#182333;font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1560px;margin:auto;padding:22px}h1{font-size:26px;margin:0}h2{font-size:18px;margin:0 0 10px}p{margin:8px 0}.muted{color:#667383;font-size:13px}.card,.bar{background:white;border:1px solid #dce2e8;border-radius:12px;padding:16px;margin-bottom:14px}.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px}button,select,input{font:inherit;border:1px solid #bcc8d6;border-radius:7px;padding:8px 12px;background:white;color:#182333}button{cursor:pointer}button:hover{background:#edf4ff}button:disabled{opacity:.4;cursor:default}.primary{background:#1763d3;color:white;border-color:#1763d3}.primary:hover{background:#124fa9}input[type=number]{width:85px}input[type=text]{width:100%}.layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px}.layout>div{min-width:0}.viewport{overflow:auto;max-height:620px;background:#161e27;border-radius:8px}#stage{width:100%;min-width:100%}canvas{display:block;width:100%;height:auto}#rgb{cursor:crosshair;touch-action:none}.choices{display:grid;grid-template-columns:1fr 1fr;gap:8px}.choices button.active{border:2px solid #1763d3;background:#e8f1ff;color:#10418b}.badge{background:#e8f1ff;color:#1558b7;padding:5px 12px;border-radius:16px}#message{min-height:25px;color:#1454ad;font-weight:600}.list{max-height:340px;overflow:auto}.item{display:flex;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid #e4e8ee}.item .choose{flex:1;text-align:left}.item.active .choose{background:#e8f1ff;border-color:#1763d3}details{margin-top:14px}summary{cursor:pointer;font-weight:600}.tip{padding:10px 0}#depth{background:#16202a}#storage{font-size:12px;color:#667383}a{color:#1558b7}@media(max-width:850px){.layout{grid-template-columns:1fr}main{padding:10px}}
+</style>
+<main>
+<h1>商品包装标注</h1>
+<p>① 框住一个商品　② 选择包装材质　③ 继续框下一个商品</p>
+<div class="bar">
+<button id="prev">上一张</button><span id="position"></span><button id="next">下一张</button>
+<label>第 <input id="frameNumber" type="number" min="1" value="1"> 张</label><button id="jump">跳转</button>
+<span id="count" class="badge"></span><button id="export" class="primary">导出标注文件</button>
+</div>
+<div class="layout">
+<div>
+<div class="card">
+<div class="bar">
+<label>图片大小 <select id="zoom"><option value="1">适应窗口</option><option value="2">放大2倍</option><option value="3">放大3倍</option><option value="4">放大4倍</option></select></label>
+<button id="new" class="primary">框下一个商品</button><button id="undo" disabled>撤销上一步</button>
+</div>
+<div class="viewport" id="viewport"><div id="stage"><canvas id="rgb" width="1280" height="960"></canvas></div></div>
+<p id="message" role="status">拖动鼠标，框住一个商品。</p>
+<p class="muted">每个框自动记录并保留编号。小商品可先放大，再通过滚动条移动图片。框错了可以撤销或重画。</p>
+</div>
+<details class="card"><summary>技术信息和深度图（通常不需要操作）</summary>
+<p id="frameName" class="muted"></p><canvas id="depth" width="1280" height="960"></canvas>
+<p class="muted">深度色标 __RANGE__，黑色为0。单位与对齐尚未确认，同坐标框仅作参考。</p>
+<a href="pairs.csv">图像清单</a> · <a href="summary.json">检查结果</a>
+</details>
+</div>
+<div>
+<div class="card">
+<h2 id="selectedName">先框住一个商品</h2>
+<p class="tip">这个商品外面的包装是什么材质？</p>
+<div class="choices" id="materials">
+<button data-material="paper">纸 / 纸盒</button><button data-material="plastic">塑料 / 塑料袋</button>
+<button data-material="metal">金属</button><button data-material="wood">木材</button>
+<button data-material="fabric">布 / 织物</button><button data-material="unknown">不确定 / 其他</button>
+</div>
+<p class="muted">点击即保存。看不清、覆膜或混合包装，选“不确定”，不要根据商品名称猜材质。</p>
+<details><summary>补充信息（可跳过）</summary>
+<label>商品编号（知道时填写）<input id="sku" type="text" placeholder="可以留空"></label>
+<button id="saveSku" disabled>保存商品编号</button>
+<p><button id="redraw" disabled>重画这个商品的框</button></p>
+<p><button id="contact" disabled>标出吸盘接触位置</button></p>
+<p class="muted">仅在需要时，在商品框内再画一个小框；它不会自动用商品整体框代替。</p>
+<p id="contactStatus" class="muted"></p>
+</details>
+</div>
+<div class="card"><h2>这张图已经标了哪些商品</h2><div id="records" class="list"></div><p id="empty" class="muted">还没有商品，先在左边画一个框。</p></div>
+<div id="storage">草稿保存在当前浏览器。完成后请导出文件备份。</div>
+<p class="muted">这是人工标注工具，不会自动识别材质。所有标注交由项目人员复核后再用于训练。</p>
+</div>
+</div>
+</main>
+<script>
+const frames=__FRAMES__;
+const $=id=>document.getElementById(id), canvas=$('rgb'), depthCanvas=$('depth'), ctx=canvas.getContext('2d'), dx=depthCanvas.getContext('2d');
+const names={paper:'纸 / 纸盒',plastic:'塑料 / 塑料袋',metal:'金属',wood:'木材',fabric:'布 / 织物',unknown:'不确定 / 其他'};
+const key='rgbd-business-v1:'+location.pathname+':'+frames.length+':'+frames[0].id+':'+frames[frames.length-1].id;
+let idx=0,records=[],nextId=1,selectedId=null,mode='new',start=null,drawing=null,images={},ready=false,generation=0,history=[],storageOkay=true;
+try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved&&Array.isArray(saved.records)){records=saved.records.filter(r=>frames.some(f=>f.id===r.frame_id));idx=Math.max(0,Math.min(frames.length-1,saved.idx||0));nextId=Math.max(1,...records.map(r=>Number(r.object_id.split('_').pop())+1));}}catch(e){storageOkay=false;}
+function message(t){$('message').textContent=t;}
+function persist(){try{localStorage.setItem(key,JSON.stringify({records,idx}));storageOkay=true;$('storage').textContent='草稿已自动保存在当前浏览器；完成后请导出文件备份。';}catch(e){storageOkay=false;$('storage').textContent='浏览器无法保存草稿，请及时导出文件，关闭页面会丢失。';}}
+function current(){return records.filter(r=>r.frame_id===frames[idx].id);}
+function chosen(){return current().find(r=>r.object_id===selectedId);}
+function checkpoint(){history.push(JSON.stringify({records,nextId,selectedId}));if(history.length>50)history.shift();}
+function inside(c,o){return c[0]>=o[0]&&c[1]>=o[1]&&c[2]<=o[2]&&c[3]<=o[3];}
+function number(r){return Number(r.object_id.split('_').pop());}
+function outline(c,b,color,label){c.strokeStyle=color;c.lineWidth=Math.max(2,canvas.width/400);c.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);if(label){const font=Math.max(18,canvas.width/55);c.font='bold '+font+'px sans-serif';const w=c.measureText(label).width+8,y=Math.max(font,b[1]-4);c.fillStyle='#132a45';c.fillRect(b[0],y-font,w,font+5);c.fillStyle=color;c.fillText(label,b[0]+4,y);}}
+function draw(){for(const [c,im] of [[ctx,images.rgb],[dx,images.depth]]){c.clearRect(0,0,canvas.width,canvas.height);if(im)c.drawImage(im,0,0,canvas.width,canvas.height);for(const r of current()){outline(c,r.object_bbox_xyxy,r.object_id===selectedId?'#77d0ff':'#ffdb57',String(number(r)));if(r.contact_bbox_xyxy)outline(c,r.contact_bbox_xyxy,'#74f7a0','');}if(drawing)outline(c,drawing,mode==='contact'?'#74f7a0':'#ffffff','');}}
+function refresh(){
+ const r=chosen(),rows=current();$('selectedName').textContent=r?'商品 '+number(r)+' · '+(names[r.material]||'还没选材质'):'先框住一个商品';$('sku').value=r?r.sku_id:'';
+ for(const id of ['saveSku','redraw','contact'])$(id).disabled=!r;
+ for(const b of $('materials').querySelectorAll('button')){b.disabled=!r;b.classList.toggle('active',!!r&&b.dataset.material===r.material);}
+ $('contactStatus').textContent=r?(r.contact_bbox_xyxy?'吸盘接触位置已记录。':'尚未记录接触位置，可以跳过。'):'';
+ $('undo').disabled=!history.length;$('count').textContent='本图 '+rows.length+' 个 · 共 '+records.length+' 个';$('empty').hidden=!!rows.length;
+ const list=$('records');list.replaceChildren();
+ for(const item of rows){const row=document.createElement('div');row.className='item'+(item.object_id===selectedId?' active':'');const edit=document.createElement('button');edit.className='choose';edit.textContent='商品 '+number(item)+' · '+(names[item.material]||'待选材质');edit.onclick=()=>{selectedId=item.object_id;mode='new';refresh();message('已选中商品 '+number(item)+'，点击右侧材质即可保存。');};const del=document.createElement('button');del.textContent='删除';del.onclick=()=>{checkpoint();records=records.filter(r=>r.object_id!==item.object_id);if(selectedId===item.object_id)selectedId=null;mode='new';persist();refresh();message('已删除，可点击撤销恢复。');};row.append(edit,del);list.append(row);}
+ draw();
+}
+function load(){
+ const f=frames[idx],version=++generation;ready=false;images={};selectedId=null;start=null;drawing=null;mode='new';canvas.width=depthCanvas.width=f.width;canvas.height=depthCanvas.height=f.height;
+ $('position').textContent='第 '+(idx+1)+' / '+frames.length+' 张';$('frameNumber').value=idx+1;$('prev').disabled=idx===0;$('next').disabled=idx===frames.length-1;$('frameName').textContent=f.id+' | '+f.width+' × '+f.height;
+ $('viewport').scrollLeft=0;$('viewport').scrollTop=0;persist();refresh();message('在图片上拖框，每个框自动成为一个新商品。');
+ for(const name of ['rgb','depth']){const im=new Image();im.onload=()=>{if(version===generation){images[name]=im;ready=!!images.rgb;draw();}};im.onerror=()=>{if(version===generation)message('图片加载失败，请检查本地文件。');};im.src=f[name];}
+}
+function coords(e){const b=canvas.getBoundingClientRect();return [Math.max(0,Math.min(canvas.width,(e.clientX-b.left)*canvas.width/b.width)),Math.max(0,Math.min(canvas.height,(e.clientY-b.top)*canvas.height/b.height))];}
+function box(a,b){return [Math.floor(Math.min(a[0],b[0])),Math.floor(Math.min(a[1],b[1])),Math.ceil(Math.max(a[0],b[0])),Math.ceil(Math.max(a[1],b[1]))];}
+canvas.onpointerdown=e=>{if(!ready||e.button!==0)return;if(mode!=='new'&&!chosen()){message('先在右边列表选一个商品。');return;}start=coords(e);canvas.setPointerCapture(e.pointerId);};
+canvas.onpointermove=e=>{if(start){drawing=box(start,coords(e));draw();}};
+canvas.onpointerup=e=>{
+ if(!start)return;const b=box(start,coords(e));start=null;drawing=null;
+ if(b[2]-b[0]<3||b[3]-b[1]<3){draw();message('框太小了，请放大图片后再画。');return;}
+ const r=chosen(),f=frames[idx];
+ if(mode==='contact'&&!inside(b,r.object_bbox_xyxy)){draw();message('接触位置必须画在选中商品框里面，本次没有保存。');return;}
+ checkpoint();
+ if(mode==='new'){const item={object_id:'object_'+String(nextId++).padStart(4,'0'),frame_id:f.id,rgb_file:f.id+'_color.jpg',depth_file:f.id+'_depth.png',image_size:[f.width,f.height],time_group:f.group,object_bbox_xyxy:b,contact_bbox_xyxy:null,coordinate_convention:'original_image_pixels_xyxy_half_open',material:'',sku_id:'',annotation_status:'needs_review'};records.push(item);selectedId=item.object_id;message('商品 '+number(item)+' 已记录。请选择包装材质，也可以继续框下一个。');}
+ else if(mode==='contact'){r.contact_bbox_xyxy=b;message('已记录接触位置。可继续框下一个商品。');}
+ else{r.object_bbox_xyxy=b;if(r.contact_bbox_xyxy&&!inside(r.contact_bbox_xyxy,b))r.contact_bbox_xyxy=null;message('已重画商品框；超出新框的旧接触位置会清除。');}
+ mode='new';persist();refresh();
+};
+canvas.onpointercancel=()=>{start=null;drawing=null;draw();};
+for(const b of $('materials').querySelectorAll('button'))b.onclick=()=>{const r=chosen();if(!r)return;checkpoint();r.material=b.dataset.material;persist();refresh();message('商品 '+number(r)+' 已保存为“'+names[r.material]+'”。继续框下一个即可。');};
+$('saveSku').onclick=()=>{const r=chosen();if(r){checkpoint();r.sku_id=$('sku').value.trim();persist();refresh();message('商品编号已保存。');}};
+$('new').onclick=()=>{mode='new';message('直接拖框添加下一个商品。');};
+$('redraw').onclick=()=>{mode='object';message('请重新框住当前选中的商品。');};
+$('contact').onclick=()=>{mode='contact';message('请在选中商品框内，画出吸盘接触位置。');};
+$('zoom').onchange=()=>{$('stage').style.width=(Number($('zoom').value)*100)+'%';};
+$('prev').onclick=()=>{if(idx>0){idx--;load();}};$('next').onclick=()=>{if(idx<frames.length-1){idx++;load();}};
+$('frameNumber').max=frames.length;
+$('jump').onclick=()=>{const n=Number($('frameNumber').value);if(Number.isInteger(n)&&n>=1&&n<=frames.length){idx=n-1;load();}else message('请输入1至'+frames.length+'之间的图片序号。');};
+$('undo').onclick=()=>{if(history.length){const old=JSON.parse(history.pop());records=old.records;nextId=old.nextId;selectedId=old.selectedId;mode='new';persist();refresh();message('已撤销上一步。');}};
+$('export').onclick=()=>{const data={schema_version:2,depth_unit:'unconfirmed',alignment:'unconfirmed',objects:records};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='yingjie_rgbd_annotations.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);message('已导出全部 '+records.length+' 个商品。未填写的接触位置保留为空。');};
+window.onbeforeunload=e=>{if(!storageOkay&&records.length){e.preventDefault();e.returnValue='';}};
+load();
+</script></html>

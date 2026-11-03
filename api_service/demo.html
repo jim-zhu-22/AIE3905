@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AIE · 视觉识别演示</title><link rel="stylesheet" href="/assets/demo.css"></head>
+<body class="customer-demo">
+<div class="app-shell">
+<header class="customer-header"><a class="customer-brand" href="#flow"><span>A</span> AIE <small>视觉识别演示</small></a><nav aria-label="演示导航"><a href="/">感知工作台</a><button class="selected" data-view="flow">流程演示</button><button data-view="tasks">任务记录</button><button data-view="settings">演示设置</button><button data-view="guide">使用说明</button></nav><span class="customer-header-note">真实结果 · 分步展示</span></header>
+<main>
+<section id="flow" class="view">
+<div class="page-head"><div><div class="eyebrow">视觉识别流程</div><h1 id="demoHeading">从一张图片，到清晰的识别结果</h1><p>上传图片 → 自动分析 → 查看结果 → 汇总导出</p></div></div>
+<details id="uploadPanel" class="panel customer-upload" open>
+<summary id="uploadSummary">上传图片，开始一次完整分析</summary>
+<form id="uploadForm">
+<div class="upload-layout"><div>
+<label for="uploadRgb">选择现场图片</label><input id="uploadRgb" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" required><p class="hint">PNG 或 JPG，最大 15 MiB；图片将发送到本机分析服务。</p>
+<p class="upload-scope">当前场景：包装分拣 · 识别包装件、箱体、袋装物与瓶子</p>
+<details class="upload-extra"><summary>添加深度图（可选）</summary><label for="uploadDepth">深度图片</label><input id="uploadDepth" type="file" accept="image/png,.png"><p class="hint">与原图同尺寸的 16 位单通道 PNG。当前仅保存，不计算物理尺寸。</p><button id="clearDepth" type="button" class="text-button">移除深度图</button></details>
+<p id="uploadService" class="hint" role="status">正在连接分析服务…</p>
+<div class="settings-actions"><button id="uploadStart" type="submit" class="primary" disabled>开始分析 →</button><button id="uploadConnect" type="button" class="secondary" hidden>重新连接</button></div>
+</div><div class="upload-preview"><img id="uploadPreview" alt="待分析图片预览" hidden><span id="uploadPlaceholder">选择图片后在这里预览</span></div></div>
+</form>
+</details>
+<p id="uploadOffline" class="notice" hidden>离线文件仅回看已有成果。上传新图片请打开已启动模型服务的本机演示页面。</p>
+<div id="uploadProgress" class="panel upload-progress" role="status" hidden><strong id="uploadProgressTitle"></strong><p id="uploadProgressText"></p><progress id="uploadBusy" aria-label="分析进行中"></progress><button id="uploadResume" class="secondary" hidden>继续查询</button><a href="#tasks">查看任务记录 →</a></div>
+<p id="uploadMessage" class="notice" role="status" hidden></p>
+<div class="flow-toolbar"><div class="flow-job-control"><label for="flowJob">选择演示记录</label><select id="flowJob"><option>正在读取…</option></select></div><button id="flowRefresh" class="secondary">刷新记录</button><button id="flowPresent" class="secondary" aria-pressed="false">专注演示</button><span id="flowMode" class="badge neutral">结果回看</span></div>
+<p id="flowMessage" class="notice" role="status">正在读取演示数据…</p>
+<div id="flowResultHost"><div id="flowBody" hidden>
+<div class="flow-summary" id="flowSummary"></div>
+<nav id="flowRail" class="flow-rail" aria-label="演示步骤"></nav>
+<div class="flow-branch"><button id="flowDepth" class="branch-button">深度信息（可选）</button><span>当前仅保存深度信息，尚未计算物理尺寸。</span></div>
+<div class="flow-inspector panel"><div class="flow-inspector-head"><div><span id="flowStep" class="eyebrow"></span><h2 id="flowTitle"></h2></div><div class="flow-instance-control"><label for="flowInstance">选择一个物体，查看完整分析过程</label><select id="flowInstance"></select></div></div>
+<p id="flowNarrative" class="flow-narrative"></p>
+<div class="flow-io"><div><span class="eyebrow">输入</span><p id="flowInput"></p></div><span class="flow-arrow">→</span><div><span class="eyebrow">输出</span><p id="flowOutput"></p></div></div>
+<div class="flow-evidence"><div id="flowVisual" class="flow-visual"></div><div><div id="flowFacts" class="flow-facts"></div><div id="flowBoundary" class="notice"></div><div id="flowDownloads" class="flow-files"></div></div></div>
+<details id="flowTechnical" class="flow-json"><summary>查看详细数据与附件</summary><p class="hint">供技术人员核对；以下只展示所选物体的数据摘录，完整记录可下载查看。</p><div id="flowFiles" class="flow-files"></div><div class="flow-caption" id="flowTrace"></div><pre id="flowJson"></pre></details>
+<div class="flow-controls"><button id="flowPrev" class="secondary">← 上一步</button><span id="flowPosition"></span><button id="flowNext" class="primary">下一步 →</button></div>
+</div></div></div></section>
+<section id="result" class="view task-result-view" hidden>
+<a href="#tasks" class="task-back">← 返回任务记录</a>
+<div class="page-head"><div><div class="eyebrow">任务成果</div><h1>任务结果</h1><p id="taskResultName">正在读取所选任务…</p></div></div>
+<p id="taskResultMessage" class="notice" role="status" hidden></p><div id="taskResultHost"></div>
+</section>
+<section id="tasks" class="view" hidden>
+<div class="page-head"><div><div class="eyebrow">任务记录</div><h1>查看任务进度与已有成果</h1><p id="taskScope">读取后台任务记录，打开结果即可进入流程演示。</p></div><button id="taskRefresh" class="secondary">刷新状态</button></div>
+<p id="taskMessage" role="status" class="hint"></p><div id="taskCards" class="customer-task-grid"></div>
+</section>
+<section id="settings" class="view" hidden>
+<div class="page-head"><div><div class="eyebrow">演示设置</div><h1>按本次汇报调整展示</h1><p>设置保存在当前浏览器，下次打开继续使用。</p></div></div>
+<form id="demoSettings" class="panel customer-settings">
+<label for="settingTitle">演示标题</label><input id="settingTitle" maxlength="60" required>
+<label for="settingRecord">默认演示记录</label><select id="settingRecord"><option value="">最新可查看记录</option></select><p class="hint">下次打开时优先展示这条记录。当前查看的记录不会被打断。</p>
+<fieldset><legend>展示内容</legend><label class="setting-toggle"><input id="settingDepth" type="checkbox">显示深度信息入口</label><p class="hint">作为补充信息展示，物理尺寸尚未计算。</p><label class="setting-toggle"><input id="settingTechnical" type="checkbox">显示详细数据与附件入口</label><p class="hint">适合技术交流；汇报时可隐藏，汇总导出仍保留。</p></fieldset>
+<div class="settings-actions"><button type="submit" class="primary">保存设置</button><button id="settingsReset" type="button" class="secondary">恢复默认</button></div><p id="settingsMessage" role="status" class="hint"></p>
+</form><p class="hint">模块接入与模型参数由后台维护；这里仅调整演示页面。</p>
+</section>
+<section id="guide" class="view" hidden>
+<div class="page-head"><div><div class="eyebrow">演示说明</div><h1>几分钟，看懂图片分析的全过程</h1><p>上传现场图片，启动分析，再按步骤查看真实结果。</p></div><a class="primary" href="#flow">开始分析 →</a></div>
+<div class="guide-grid">
+<article class="panel"><span class="step-number">1</span><h2>从上传图片开始</h2><p>在“流程演示”选择一张现场图片，点击“开始分析”。页面显示真实任务进度，完成后自动展示结果；也可以回看已有记录。</p></article>
+<article class="panel"><span class="step-number">2</span><h2>跟着一个物体看</h2><p>用物体下拉框切换目标，各步骤会跟随同一个物体，便于对照它在原图中的轮廓、特写和材质候选。</p></article>
+<article class="panel"><span class="step-number">3</span><h2>理解“识别物体”</h2><p>系统把画面中的目标逐个圈出来，标出各自的位置与轮廓。这一步在技术上叫“检测与分割”。</p></article>
+<article class="panel"><span class="step-number">4</span><h2>交接给下游系统</h2><p>最后一步展示目标编号、类别、像素位置、轮廓与材质预测，导出 JSON 后可供机器臂任务规划模块读取。评分反映模型倾向，不等于实际准确率。</p></article>
+</div>
+<div class="customer-guide-note"><h2>目前能展示什么？</h2><p>物体位置与轮廓、物体特写、材质候选，以及可下载的结构化结果。深度信息已保留，物理尺寸和几何属性尚未计算。</p><p>点击“开始分析”会调用本机模型；切换结果步骤不会重新推理。离线文件仅支持成果回看。流程到“汇总与导出”结束。</p></div>
+</section>
+</main><footer class="page-footer"><span>AIE · 视觉识别演示</span><span>原图 → 物体 → 材质 → 结果</span></footer></div>
+<script src="/assets/demo_shell.js"></script><script src="/assets/demo_settings.js"></script><script src="/assets/flow.js"></script><script src="/assets/demo_upload.js"></script>
+</body></html>
